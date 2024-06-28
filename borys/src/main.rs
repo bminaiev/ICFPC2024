@@ -23,6 +23,8 @@ async fn main() -> Result<()> {
     eprintln!("Res: {:?}", res);
     let body = res.text().await?;
     eprintln!("Body: {:?}", body);
+    // save to file
+    fs::write("inputs/last_response.txt", &body)?;
     let parsed = parse_string(&body);
     eprintln!("Parsed: {:?}", parsed);
     // test();

@@ -1,7 +1,8 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fmt::{self, Formatter},
     fs,
+    rc::Rc,
 };
 
 #[derive(Debug)]
@@ -34,11 +35,20 @@ pub enum Token {
     Bool(bool),
     Int(i64),
     String(Vec<u8>),
-    UnaryOp(UnaryOp, Box<Token>),
-    BinaryOp(BinaryOp, Box<Token>, Box<Token>),
-    If(Box<Token>, Box<Token>, Box<Token>),
-    // TODO: Lambda abstraction
-    // TODO: Evaluation
+    UnaryOp(UnaryOp, Rc<Token>),
+    BinaryOp(BinaryOp, Rc<Token>, Rc<Token>),
+    If(Rc<Token>, Rc<Token>, Rc<Token>),
+    CreateVar(usize, Rc<Token>),
+    UseVar(usize),
+}
+
+impl Token {
+    pub fn create_var(&self) -> (usize, Rc<Token>) {
+        match self {
+            Token::CreateVar(i, inner) => (*i, inner.clone()),
+            _ => panic!("Expected CreateVar, got {:?}", self),
+        }
+    }
 }
 
 impl std::fmt::Debug for Token {
@@ -57,6 +67,8 @@ impl std::fmt::Debug for Token {
             Token::If(cond, first, second) => {
                 write!(f, "If({:?}, {:?}, {:?})", cond, first, second)
             }
+            Token::CreateVar(i, inner) => write!(f, "CreateVar({}, {:?})", i, inner),
+            Token::UseVar(i) => write!(f, "UseVar({})", i),
         }
     }
 }
@@ -74,19 +86,21 @@ pub fn encode_string(s: &str) -> String {
     String::from_utf8(res).unwrap()
 }
 
+fn parse_integer(s: &[u8]) -> i64 {
+    let mut res = 0;
+    for &c in s {
+        res = res * BASE + (c - START) as i64;
+    }
+    res
+}
+
 pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
     let s = tokens.pop_front().unwrap();
     let indicator = s[0];
     match indicator {
         b'T' => Token::Bool(true),
         b'F' => Token::Bool(false),
-        b'I' => {
-            let mut res = 0;
-            for i in 1..s.len() {
-                res = res * BASE + (s[i] - START) as i64;
-            }
-            Token::Int(res)
-        }
+        b'I' => Token::Int(parse_integer(&s[1..])),
         b'S' => {
             let mut str = vec![];
             for i in 1..s.len() {
@@ -96,7 +110,7 @@ pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
             Token::String(str)
         }
         b'U' => {
-            let inner = Box::new(parse(tokens));
+            let inner = Rc::new(parse(tokens));
             match s[1] {
                 b'-' => Token::UnaryOp(UnaryOp::NegInteger, inner),
                 b'!' => Token::UnaryOp(UnaryOp::Not, inner),
@@ -106,8 +120,8 @@ pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
             }
         }
         b'B' => {
-            let first = Box::new(parse(tokens));
-            let second = Box::new(parse(tokens));
+            let first = Rc::new(parse(tokens));
+            let second = Rc::new(parse(tokens));
             match s[1] {
                 b'+' => Token::BinaryOp(BinaryOp::Add, first, second),
                 b'-' => Token::BinaryOp(BinaryOp::Sub, first, second),
@@ -127,16 +141,19 @@ pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
             }
         }
         b'?' => {
-            let cond = Box::new(parse(tokens));
-            let first = Box::new(parse(tokens));
-            let second = Box::new(parse(tokens));
+            let cond = Rc::new(parse(tokens));
+            let first = Rc::new(parse(tokens));
+            let second = Rc::new(parse(tokens));
             Token::If(cond, first, second)
         }
         b'L' => {
-            panic!("Lambda abstraction not implemented yet")
+            let i = parse_integer(&s[1..]);
+            let inner = Rc::new(parse(tokens));
+            Token::CreateVar(i as usize, inner)
         }
         b'v' => {
-            panic!("Evaluation not implemented yet")
+            let i = parse_integer(&s[1..]);
+            Token::UseVar(i as usize)
         }
         _ => panic!("Invalid token: {}", indicator),
     }
@@ -148,8 +165,125 @@ pub fn parse_string(input: &str) -> Token {
         .map(|s| s.as_bytes().to_vec())
         .collect();
     let res = parse(&mut words);
-    assert!(words.is_empty());
+    assert!(words.is_empty(), "left: {:?}", words);
     res
+}
+
+#[derive(Debug)]
+pub enum Value {
+    Bool(bool),
+    Int(i64),
+    String(Vec<u8>),
+    Lambda(usize, Rc<Token>),
+}
+
+impl Value {
+    pub fn int(&self) -> i64 {
+        match self {
+            Value::Int(i) => *i,
+            _ => panic!("Expected int, got {:?}", self),
+        }
+    }
+
+    pub fn bool(&self) -> bool {
+        match self {
+            Value::Bool(b) => *b,
+            _ => panic!("Expected bool, got {:?}", self),
+        }
+    }
+
+    pub fn string(&self) -> Vec<u8> {
+        match self {
+            Value::String(s) => s.clone(),
+            _ => panic!("Expected string, got {:?}", self),
+        }
+    }
+
+    pub fn lambda(&self) -> (usize, Rc<Token>) {
+        match self {
+            Value::Lambda(i, inner) => (*i, inner.clone()),
+            _ => panic!("Expected lambda, got {:?}", self),
+        }
+    }
+
+    pub fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            _ => panic!("Expected same types, got {:?} and {:?}", self, other),
+        }
+    }
+}
+
+fn eval_rec(token: &Token, context: &HashMap<usize, Rc<Token>>) -> Value {
+    match token {
+        Token::Bool(b) => Value::Bool(*b),
+        Token::Int(i) => Value::Int(*i),
+        Token::String(s) => Value::String(s.clone()),
+        Token::UnaryOp(op, inner) => {
+            let inner = eval_rec(inner, context);
+            match op {
+                UnaryOp::NegInteger => Value::Int(-inner.int()),
+                UnaryOp::Not => Value::Bool(!inner.bool()),
+                UnaryOp::StringToInt => todo!("StringToInt"),
+                UnaryOp::IntToString => todo!("IntToString"),
+            }
+        }
+        Token::BinaryOp(op, first, second) => {
+            let first_ev = || eval_rec(first, context);
+            let second_ev = || eval_rec(second, context);
+            match op {
+                BinaryOp::Add => Value::Int(first_ev().int() + second_ev().int()),
+                BinaryOp::Sub => Value::Int(first_ev().int() - second_ev().int()),
+                BinaryOp::Mul => Value::Int(first_ev().int() * second_ev().int()),
+                BinaryOp::Div => Value::Int(first_ev().int() / second_ev().int()),
+                BinaryOp::Mod => Value::Int(first_ev().int() % second_ev().int()),
+                BinaryOp::Less => Value::Bool(first_ev().int() < second_ev().int()),
+                BinaryOp::More => Value::Bool(first_ev().int() > second_ev().int()),
+                BinaryOp::Eq => Value::Bool(first_ev().eq(&second_ev())),
+                BinaryOp::Or => Value::Bool(first_ev().bool() || second_ev().bool()),
+                BinaryOp::And => Value::Bool(first_ev().bool() && second_ev().bool()),
+                BinaryOp::Concat => {
+                    let mut res = first_ev().string();
+                    res.extend(second_ev().string());
+                    Value::String(res)
+                }
+                BinaryOp::Prefix => {
+                    let res = second_ev().string()[..first_ev().int() as usize].to_vec();
+                    Value::String(res)
+                }
+                BinaryOp::Drop => {
+                    let res = second_ev().string()[first_ev().int() as usize..].to_vec();
+                    Value::String(res)
+                }
+                BinaryOp::Apply => {
+                    let mut new_context = context.clone();
+                    let (i, inner) = first_ev().lambda();
+                    new_context.insert(i, second.clone());
+                    eval_rec(&inner, &new_context)
+                }
+            }
+        }
+        Token::If(cond, first, second) => {
+            let cond = eval_rec(cond, context);
+            if cond.bool() {
+                eval_rec(first, context)
+            } else {
+                eval_rec(second, context)
+            }
+        }
+        Token::CreateVar(i, inner) => Value::Lambda(*i, inner.clone()),
+        Token::UseVar(i) => {
+            let inner = context.get(i).unwrap();
+            eval_rec(inner, context)
+        }
+    }
+}
+
+pub fn eval(token: &Token) -> Value {
+    let context = HashMap::new();
+    eval_rec(token, &context)
 }
 
 #[test]
@@ -172,4 +306,13 @@ fn encode_str_test() {
     let input = "get index";
     let res = encode_string(input);
     eprintln!("Res: {:?}", res);
+}
+
+#[test]
+fn parse_simple_lambda() {
+    let input = "B$ B$ L# L$ v# B. SB%,,/ S}Q/2,$_ IK";
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
 }
