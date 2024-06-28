@@ -36,7 +36,7 @@ pub enum BinaryOp {
 #[derive(Clone)]
 pub enum Token {
     Bool(bool),
-    Int(i64),
+    Int(i128),
     String(Vec<u8>),
     UnaryOp(UnaryOp, Rc<Token>),
     BinaryOp(BinaryOp, Rc<Token>, Rc<Token>),
@@ -54,7 +54,7 @@ impl Token {
         }
     }
 
-    pub fn int(&self) -> i64 {
+    pub fn int(&self) -> i128 {
         match self {
             Token::Int(i) => *i,
             _ => panic!("Expected Int, got {:?}", self),
@@ -92,14 +92,14 @@ impl std::fmt::Debug for Token {
             Token::If(cond, first, second) => {
                 write!(f, "If({:?}, {:?}, {:?})", cond, first, second)
             }
-            Token::Abstraction(i, inner) => write!(f, "CreateVar({}, {:?})", i, inner),
+            Token::Abstraction(i, inner) => write!(f, "Abstraction({}, {:?})", i, inner),
             Token::Application(lhs, rhs) => write!(f, "Application({:?}, {:?})", lhs, rhs),
             Token::Id(i) => write!(f, "UseVar({})", i),
         }
     }
 }
 
-const BASE: i64 = 94;
+const BASE: i128 = 94;
 const START: u8 = 33;
 const ALPH: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`|~ \n";
 
@@ -112,10 +112,10 @@ pub fn encode_string(s: &str) -> String {
     String::from_utf8(res).unwrap()
 }
 
-fn parse_integer(s: &[u8]) -> i64 {
+fn parse_integer(s: &[u8]) -> i128 {
     let mut res = 0;
     for &c in s {
-        res = res * BASE + (c - START) as i64;
+        res = res * BASE + (c - START) as i128;
     }
     res
 }
@@ -207,7 +207,7 @@ pub fn eval(token: &Token) -> Token {
                     let mut res = 0;
                     for c in inner.string() {
                         let pos = ALPH.find(c as char).unwrap();
-                        res = res * BASE + pos as i64;
+                        res = res * BASE + pos as i128;
                     }
                     Token::Int(res)
                 }
@@ -266,8 +266,9 @@ pub fn eval(token: &Token) -> Token {
             }
         }
         Token::Abstraction(i, inner) => {
-            let inner = eval(inner);
-            Token::Abstraction(*i, Rc::new(inner))
+            // let inner = eval(inner);
+            Token::Abstraction(*i, inner.clone())
+            // Token::Abstraction(*i, Rc::new(inner))
         }
         Token::Application(e1, e2) => match e1.as_ref() {
             Token::Abstraction(i, inner) => {
@@ -364,6 +365,16 @@ fn parse_smaller() {
 }
 
 #[test]
+fn parse_smaller2() {
+    let input = "B$ B$ L# L! v! I& I$";
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
+    assert_eq!(eval_res.int(), 3);
+}
+
+#[test]
 fn int_to_string() {
     let input = "U$ I4%34";
     let res = parse_string(input);
@@ -381,4 +392,26 @@ fn string_to_int() {
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
     assert_eq!(eval_res.int(), 15818151);
+}
+
+#[test]
+fn fact() {
+    let input = r#"
+        B$ B$ L" B$ L# B$ v" B$ v# v# L# B$ v" B$ v# v# L" L# ? B= v# I" I" B* v# B$ v" B- v# I" I&
+    "#;
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
+}
+
+#[test]
+fn fact_diff() {
+    let input = r#"
+        B$ B$ Lu B$ Lx B$ vu B$ vx vx Ly B$ vu B$ vy vy Lf Ln ? B= vn I" I" B* vn B$ vf B- vn I" I&
+    "#;
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
 }

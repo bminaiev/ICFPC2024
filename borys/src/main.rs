@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
     let client = reqwest::Client::new();
     let res = client
         .post("https://boundvariable.space/communicate")
-        .body(encode_string("solve language_test 4w3s0m3"))
+        .body(encode_string("get lambdaman21"))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await?;
