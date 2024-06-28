@@ -58,11 +58,11 @@ def evaluate(tokens, env=None):
         env = {}
     if not tokens:
         return None
-    
+
     token = tokens.pop(0)
     indicator = token[0]
     body = token[1:]
-    
+
     if indicator == 'T':
         return True
     elif indicator == 'F':
@@ -113,7 +113,10 @@ def evaluate(tokens, env=None):
         elif operator == 'D':
             return y[x:]
         elif operator == '$':
-            return x(y)
+            if callable(x):
+                return x(y)
+            else:
+                raise TypeError(f"Expected a callable for application, got {x}")
     elif indicator == '?':
         condition = evaluate(tokens, env)
         if_true = evaluate(tokens, env)
@@ -125,7 +128,10 @@ def evaluate(tokens, env=None):
         return lambda arg: evaluate(lambda_body.copy(), {**env, variable_number: arg})
     elif indicator == 'v':
         variable_number = decode_base94(body)
-        return env.get(variable_number)
+        if variable_number in env:
+            return env[variable_number]
+        else:
+            raise ValueError(f"Variable {variable_number} not found in environment")
     return None
 
 def encode_boolean(value):
@@ -165,18 +171,22 @@ def main():
     print("Encoded string:", icfp_string_value)
 """
 def main():
-    task = "lambdaman"
-    for i in range(1, 26):
-        msg = f"get {task}{i}"
-        encoded = encode_icfp(msg)
-        #print("enc:", encoded)
-        response = send(encoded)
-        #print(response)
-        decoded = evaluate(response.split())
-        with open(f"{task}{i:02d}.in", "w") as out:
-            print(decoded, file=out)
-        print(i)
-        #print(decoded)
+    task = "efficiency"
+    for i in range(1, 14):
+    # for i in [6, 9, 10, 21, 25]:
+        try:
+            msg = f"get {task}{i}"
+            encoded = encode_icfp(msg)
+            #print("enc:", encoded)
+            response = send(encoded)
+            print(response)
+            #decoded = evaluate(response.split())
+            decoded = response
+            with open(f"{task}{i:02d}.in", "w") as out:
+                print(decoded, file=out)
+            print(i, "ok")
+        except:
+            print(i, "fail")
 
 if __name__ == "__main__":
     main()
