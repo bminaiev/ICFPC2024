@@ -350,6 +350,7 @@ fn parse_simple_lambda() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
+    assert_eq!(eval_res.string(), b"Hello World!");
 }
 
 #[test]
@@ -359,6 +360,7 @@ fn parse_smaller() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
+    assert_eq!(eval_res.int(), 5);
 }
 
 #[test]
@@ -368,6 +370,7 @@ fn int_to_string() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
+    assert_eq!(eval_res.string(), b"test");
 }
 
 #[test]
@@ -377,4 +380,5 @@ fn string_to_int() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
+    assert_eq!(eval_res.int(), 15818151);
 }
