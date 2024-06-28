@@ -1,11 +1,14 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fmt::{self, Formatter},
     fs,
     rc::Rc,
 };
 
-#[derive(Debug)]
+// https://www.minjiezha.com/tech/2011/01/19/A-Simple-Lambda-Calculus-Evaluator-III.html
+// https://laurenar.net/posts/lambda_calculus_interpreter/
+
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     NegInteger,
     Not,
@@ -13,7 +16,7 @@ pub enum UnaryOp {
     IntToString,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -28,9 +31,9 @@ pub enum BinaryOp {
     Concat,
     Prefix,
     Drop,
-    Apply,
 }
 
+#[derive(Clone)]
 pub enum Token {
     Bool(bool),
     Int(i64),
@@ -38,15 +41,37 @@ pub enum Token {
     UnaryOp(UnaryOp, Rc<Token>),
     BinaryOp(BinaryOp, Rc<Token>, Rc<Token>),
     If(Rc<Token>, Rc<Token>, Rc<Token>),
-    CreateVar(usize, Rc<Token>),
-    UseVar(usize),
+    Application(Rc<Token>, Rc<Token>),
+    Abstraction(usize, Rc<Token>),
+    Id(usize),
 }
 
 impl Token {
     pub fn create_var(&self) -> (usize, Rc<Token>) {
         match self {
-            Token::CreateVar(i, inner) => (*i, inner.clone()),
+            Token::Abstraction(i, inner) => (*i, inner.clone()),
             _ => panic!("Expected CreateVar, got {:?}", self),
+        }
+    }
+
+    pub fn int(&self) -> i64 {
+        match self {
+            Token::Int(i) => *i,
+            _ => panic!("Expected Int, got {:?}", self),
+        }
+    }
+
+    pub fn bool(&self) -> bool {
+        match self {
+            Token::Bool(b) => *b,
+            _ => panic!("Expected Bool, got {:?}", self),
+        }
+    }
+
+    pub fn string(&self) -> Vec<u8> {
+        match self {
+            Token::String(s) => s.clone(),
+            _ => panic!("Expected String, got {:?}", self),
         }
     }
 }
@@ -67,8 +92,9 @@ impl std::fmt::Debug for Token {
             Token::If(cond, first, second) => {
                 write!(f, "If({:?}, {:?}, {:?})", cond, first, second)
             }
-            Token::CreateVar(i, inner) => write!(f, "CreateVar({}, {:?})", i, inner),
-            Token::UseVar(i) => write!(f, "UseVar({})", i),
+            Token::Abstraction(i, inner) => write!(f, "CreateVar({}, {:?})", i, inner),
+            Token::Application(lhs, rhs) => write!(f, "Application({:?}, {:?})", lhs, rhs),
+            Token::Id(i) => write!(f, "UseVar({})", i),
         }
     }
 }
@@ -136,7 +162,7 @@ pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
                 b'.' => Token::BinaryOp(BinaryOp::Concat, first, second),
                 b'T' => Token::BinaryOp(BinaryOp::Prefix, first, second),
                 b'D' => Token::BinaryOp(BinaryOp::Drop, first, second),
-                b'$' => Token::BinaryOp(BinaryOp::Apply, first, second),
+                b'$' => Token::Application(first, second),
                 _ => panic!("Invalid binary operator: {}", s[1]),
             }
         }
@@ -149,11 +175,11 @@ pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
         b'L' => {
             let i = parse_integer(&s[1..]);
             let inner = Rc::new(parse(tokens));
-            Token::CreateVar(i as usize, inner)
+            Token::Abstraction(i as usize, inner)
         }
         b'v' => {
             let i = parse_integer(&s[1..]);
-            Token::UseVar(i as usize)
+            Token::Id(i as usize)
         }
         _ => panic!("Invalid token: {}", indicator),
     }
@@ -169,121 +195,130 @@ pub fn parse_string(input: &str) -> Token {
     res
 }
 
-#[derive(Debug)]
-pub enum Value {
-    Bool(bool),
-    Int(i64),
-    String(Vec<u8>),
-    Lambda(usize, Rc<Token>),
-}
-
-impl Value {
-    pub fn int(&self) -> i64 {
-        match self {
-            Value::Int(i) => *i,
-            _ => panic!("Expected int, got {:?}", self),
-        }
-    }
-
-    pub fn bool(&self) -> bool {
-        match self {
-            Value::Bool(b) => *b,
-            _ => panic!("Expected bool, got {:?}", self),
-        }
-    }
-
-    pub fn string(&self) -> Vec<u8> {
-        match self {
-            Value::String(s) => s.clone(),
-            _ => panic!("Expected string, got {:?}", self),
-        }
-    }
-
-    pub fn lambda(&self) -> (usize, Rc<Token>) {
-        match self {
-            Value::Lambda(i, inner) => (*i, inner.clone()),
-            _ => panic!("Expected lambda, got {:?}", self),
-        }
-    }
-
-    pub fn eq(&self, other: &Value) -> bool {
-        match (self, other) {
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Int(a), Value::Int(b)) => a == b,
-            (Value::String(a), Value::String(b)) => a == b,
-            _ => panic!("Expected same types, got {:?} and {:?}", self, other),
-        }
-    }
-}
-
-fn eval_rec(token: &Token, context: &HashMap<usize, Rc<Token>>) -> Value {
+pub fn eval(token: &Token) -> Token {
     match token {
-        Token::Bool(b) => Value::Bool(*b),
-        Token::Int(i) => Value::Int(*i),
-        Token::String(s) => Value::String(s.clone()),
+        Token::Bool(_) | Token::Int(_) | Token::String(_) | Token::Id(_) => token.clone(),
         Token::UnaryOp(op, inner) => {
-            let inner = eval_rec(inner, context);
+            let inner = eval(inner);
             match op {
-                UnaryOp::NegInteger => Value::Int(-inner.int()),
-                UnaryOp::Not => Value::Bool(!inner.bool()),
-                UnaryOp::StringToInt => todo!("StringToInt"),
-                UnaryOp::IntToString => todo!("IntToString"),
+                UnaryOp::NegInteger => Token::Int(-inner.int()),
+                UnaryOp::Not => Token::Bool(!inner.bool()),
+                UnaryOp::StringToInt => {
+                    let mut res = 0;
+                    for c in inner.string() {
+                        let pos = ALPH.find(c as char).unwrap();
+                        res = res * BASE + pos as i64;
+                    }
+                    Token::Int(res)
+                }
+                UnaryOp::IntToString => {
+                    let mut res = vec![];
+                    let mut n = inner.int();
+                    while n > 0 {
+                        res.push(ALPH.as_bytes()[(n % BASE) as usize]);
+                        n /= BASE;
+                    }
+                    res.reverse();
+                    Token::String(res)
+                }
             }
         }
         Token::BinaryOp(op, first, second) => {
-            let first_ev = || eval_rec(first, context);
-            let second_ev = || eval_rec(second, context);
+            let first = eval(first);
+            let second = eval(second);
             match op {
-                BinaryOp::Add => Value::Int(first_ev().int() + second_ev().int()),
-                BinaryOp::Sub => Value::Int(first_ev().int() - second_ev().int()),
-                BinaryOp::Mul => Value::Int(first_ev().int() * second_ev().int()),
-                BinaryOp::Div => Value::Int(first_ev().int() / second_ev().int()),
-                BinaryOp::Mod => Value::Int(first_ev().int() % second_ev().int()),
-                BinaryOp::Less => Value::Bool(first_ev().int() < second_ev().int()),
-                BinaryOp::More => Value::Bool(first_ev().int() > second_ev().int()),
-                BinaryOp::Eq => Value::Bool(first_ev().eq(&second_ev())),
-                BinaryOp::Or => Value::Bool(first_ev().bool() || second_ev().bool()),
-                BinaryOp::And => Value::Bool(first_ev().bool() && second_ev().bool()),
+                BinaryOp::Add => Token::Int(first.int() + second.int()),
+                BinaryOp::Sub => Token::Int(first.int() - second.int()),
+                BinaryOp::Mul => Token::Int(first.int() * second.int()),
+                BinaryOp::Div => Token::Int(first.int() / second.int()),
+                BinaryOp::Mod => Token::Int(first.int() % second.int()),
+                BinaryOp::Less => Token::Bool(first.int() < second.int()),
+                BinaryOp::More => Token::Bool(first.int() > second.int()),
+                BinaryOp::Eq => match (&first, &second) {
+                    (Token::Int(a), Token::Int(b)) => Token::Bool(a == b),
+                    (Token::Bool(a), Token::Bool(b)) => Token::Bool(a == b),
+                    (Token::String(a), Token::String(b)) => Token::Bool(a == b),
+                    _ => panic!("Invalid equality check: {:?} == {:?}", first, second),
+                },
+                BinaryOp::Or => Token::Bool(first.bool() || second.bool()),
+                BinaryOp::And => Token::Bool(first.bool() && second.bool()),
                 BinaryOp::Concat => {
-                    let mut res = first_ev().string();
-                    res.extend(second_ev().string());
-                    Value::String(res)
+                    let mut res = first.string();
+                    res.extend(second.string());
+                    Token::String(res)
                 }
                 BinaryOp::Prefix => {
-                    let res = second_ev().string()[..first_ev().int() as usize].to_vec();
-                    Value::String(res)
+                    let res = second.string()[..first.int() as usize].to_vec();
+                    Token::String(res)
                 }
                 BinaryOp::Drop => {
-                    let res = second_ev().string()[first_ev().int() as usize..].to_vec();
-                    Value::String(res)
-                }
-                BinaryOp::Apply => {
-                    let mut new_context = context.clone();
-                    let (i, inner) = first_ev().lambda();
-                    new_context.insert(i, second.clone());
-                    eval_rec(&inner, &new_context)
+                    let res = second.string()[first.int() as usize..].to_vec();
+                    Token::String(res)
                 }
             }
         }
         Token::If(cond, first, second) => {
-            let cond = eval_rec(cond, context);
+            let cond = eval(cond);
             if cond.bool() {
-                eval_rec(first, context)
+                eval(first)
             } else {
-                eval_rec(second, context)
+                eval(second)
             }
         }
-        Token::CreateVar(i, inner) => Value::Lambda(*i, inner.clone()),
-        Token::UseVar(i) => {
-            let inner = context.get(i).unwrap();
-            eval_rec(inner, context)
+        Token::Abstraction(i, inner) => {
+            let inner = eval(inner);
+            Token::Abstraction(*i, Rc::new(inner))
         }
+        Token::Application(e1, e2) => match e1.as_ref() {
+            Token::Abstraction(i, inner) => {
+                let inner = substitute(inner, *i, e2.clone());
+                eval(&inner)
+            }
+            _ => {
+                let e1 = eval(e1);
+                let e2 = eval(e2);
+                eval(&Token::Application(Rc::new(e1), Rc::new(e2)))
+            }
+        },
     }
 }
 
-pub fn eval(token: &Token) -> Value {
-    let context = HashMap::new();
-    eval_rec(token, &context)
+fn substitute(token: &Token, var: usize, with: Rc<Token>) -> Rc<Token> {
+    match token {
+        Token::Bool(_) | Token::Int(_) | Token::String(_) => Rc::new(token.clone()),
+        Token::UnaryOp(op, inner) => {
+            Rc::new(Token::UnaryOp(op.clone(), substitute(inner, var, with)))
+        }
+        Token::BinaryOp(op, first, second) => Rc::new(Token::BinaryOp(
+            op.clone(),
+            substitute(first, var, with.clone()),
+            substitute(second, var, with),
+        )),
+        Token::If(cond, first, second) => Rc::new(Token::If(
+            substitute(cond, var, with.clone()),
+            substitute(first, var, with.clone()),
+            substitute(second, var, with),
+        )),
+        Token::Abstraction(i, inner) => {
+            if *i == var {
+                // shadows, don't substitute
+                Rc::new(Token::Abstraction(*i, inner.clone()))
+            } else {
+                Rc::new(Token::Abstraction(*i, substitute(inner, var, with)))
+            }
+        }
+        Token::Id(i) => {
+            if *i == var {
+                with
+            } else {
+                Rc::new(Token::Id(*i))
+            }
+        }
+        Token::Application(lhs, rhs) => Rc::new(Token::Application(
+            substitute(lhs, var, with.clone()),
+            substitute(rhs, var, with),
+        )),
+    }
 }
 
 #[test]
@@ -311,6 +346,33 @@ fn encode_str_test() {
 #[test]
 fn parse_simple_lambda() {
     let input = "B$ B$ L# L$ v# B. SB%,,/ S}Q/2,$_ IK";
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
+}
+
+#[test]
+fn parse_smaller() {
+    let input = "B$ B$ L# L! v# I& I$";
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
+}
+
+#[test]
+fn int_to_string() {
+    let input = "U$ I4%34";
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    let eval_res = eval(&res);
+    eprintln!("Eval res: {:?}", eval_res);
+}
+
+#[test]
+fn string_to_int() {
+    let input = "U# S4%34";
     let res = parse_string(input);
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);

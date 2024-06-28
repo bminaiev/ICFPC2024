@@ -4,7 +4,7 @@ mod parser;
 
 use anyhow::Result;
 
-use crate::parser::{encode_string, parse_string};
+use crate::parser::{encode_string, eval, parse_string};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
     let client = reqwest::Client::new();
     let res = client
         .post("https://boundvariable.space/communicate")
-        .body(encode_string("get lambdaman6"))
+        .body(encode_string("solve language_test 4w3s0m3"))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await?;
@@ -27,6 +27,8 @@ async fn main() -> Result<()> {
     fs::write("inputs/last_response.txt", &body)?;
     let parsed = parse_string(&body);
     eprintln!("Parsed: {:?}", parsed);
+    let evaluated = eval(&parsed);
+    eprintln!("Evaluated: {:?}", evaluated);
     // test();
 
     Ok(())
