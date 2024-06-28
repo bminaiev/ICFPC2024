@@ -180,8 +180,8 @@ def main():
             #print("enc:", encoded)
             response = send(encoded)
             print(response)
-            #decoded = evaluate(response.split())
-            decoded = response
+            decoded = evaluate(response.split())
+            #decoded = response
             with open(f"{task}{i:02d}.in", "w") as out:
                 print(decoded, file=out)
             print(i, "ok")
