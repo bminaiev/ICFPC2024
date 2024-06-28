@@ -171,8 +171,8 @@ def main():
     print("Encoded string:", icfp_string_value)
 """
 def main():
-    task = "efficiency"
-    for i in range(1, 14):
+    task = "3d"
+    for i in range(1, 13):
     # for i in [6, 9, 10, 21, 25]:
         try:
             msg = f"get {task}{i}"
