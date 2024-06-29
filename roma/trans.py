@@ -1,4 +1,6 @@
 import string
+import sys
+sys.setrecursionlimit(20000)
 
 # Mapping of characters for encoding and decoding
 ENCODING_CHARS = (
