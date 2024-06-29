@@ -5,6 +5,8 @@ use std::{
     rc::Rc,
 };
 
+use num_bigint::{BigInt, Sign};
+
 // https://www.minjiezha.com/tech/2011/01/19/A-Simple-Lambda-Calculus-Evaluator-III.html
 // https://laurenar.net/posts/lambda_calculus_interpreter/
 
@@ -33,10 +35,12 @@ pub enum BinaryOp {
     Drop,
 }
 
+type Int = BigInt;
+
 #[derive(Clone)]
 pub enum Token {
     Bool(bool),
-    Int(i128),
+    Int(Int),
     String(Vec<u8>),
     UnaryOp(UnaryOp, Rc<Token>),
     BinaryOp(BinaryOp, Rc<Token>, Rc<Token>),
@@ -54,9 +58,16 @@ impl Token {
         }
     }
 
-    pub fn int(&self) -> i128 {
+    pub fn int(&self) -> Int {
         match self {
-            Token::Int(i) => *i,
+            Token::Int(i) => i.clone(),
+            _ => panic!("Expected Int, got {:?}", self),
+        }
+    }
+
+    pub fn int_usize(&self) -> usize {
+        match self {
+            Token::Int(i) => i.clone().try_into().unwrap(),
             _ => panic!("Expected Int, got {:?}", self),
         }
     }
@@ -99,7 +110,9 @@ impl std::fmt::Debug for Token {
     }
 }
 
-const BASE: i128 = 94;
+fn base() -> Int {
+    Int::from(94)
+}
 const START: u8 = 33;
 const ALPH: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`|~ \n";
 
@@ -112,10 +125,10 @@ pub fn encode_string(s: &str) -> String {
     String::from_utf8(res).unwrap()
 }
 
-fn parse_integer(s: &[u8]) -> i128 {
-    let mut res = 0;
+fn parse_integer(s: &[u8]) -> Int {
+    let mut res = Int::ZERO;
     for &c in s {
-        res = res * BASE + (c - START) as i128;
+        res = res * base() + Int::from(c - START);
     }
     res
 }
@@ -173,12 +186,12 @@ pub fn parse(tokens: &mut VecDeque<Vec<u8>>) -> Token {
             Token::If(cond, first, second)
         }
         b'L' => {
-            let i = parse_integer(&s[1..]);
+            let i: usize = parse_integer(&s[1..]).try_into().unwrap();
             let inner = Rc::new(parse(tokens));
             Token::Abstraction(i as usize, inner)
         }
         b'v' => {
-            let i = parse_integer(&s[1..]);
+            let i: usize = parse_integer(&s[1..]).try_into().unwrap();
             Token::Id(i as usize)
         }
         _ => panic!("Invalid token: {}", indicator),
@@ -204,19 +217,20 @@ pub fn eval(token: &Token) -> Token {
                 UnaryOp::NegInteger => Token::Int(-inner.int()),
                 UnaryOp::Not => Token::Bool(!inner.bool()),
                 UnaryOp::StringToInt => {
-                    let mut res = 0;
+                    let mut res = Int::ZERO;
                     for c in inner.string() {
                         let pos = ALPH.find(c as char).unwrap();
-                        res = res * BASE + pos as i128;
+                        res = res * base() + Int::from(pos);
                     }
                     Token::Int(res)
                 }
                 UnaryOp::IntToString => {
                     let mut res = vec![];
                     let mut n = inner.int();
-                    while n > 0 {
-                        res.push(ALPH.as_bytes()[(n % BASE) as usize]);
-                        n /= BASE;
+                    while n.sign() == Sign::Plus {
+                        let pos: usize = (n.clone() % base()).try_into().unwrap();
+                        res.push(ALPH.as_bytes()[pos]);
+                        n /= base();
                     }
                     res.reverse();
                     Token::String(res)
@@ -248,11 +262,13 @@ pub fn eval(token: &Token) -> Token {
                     Token::String(res)
                 }
                 BinaryOp::Prefix => {
-                    let res = second.string()[..first.int() as usize].to_vec();
+                    let first: usize = first.int().try_into().unwrap();
+                    let res = second.string()[..first].to_vec();
                     Token::String(res)
                 }
                 BinaryOp::Drop => {
-                    let res = second.string()[first.int() as usize..].to_vec();
+                    let first: usize = first.int().try_into().unwrap();
+                    let res = second.string()[first..].to_vec();
                     Token::String(res)
                 }
             }
@@ -361,7 +377,7 @@ fn parse_smaller() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
-    assert_eq!(eval_res.int(), 5);
+    assert_eq!(eval_res.int_usize(), 5);
 }
 
 #[test]
@@ -371,7 +387,7 @@ fn parse_smaller2() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
-    assert_eq!(eval_res.int(), 3);
+    assert_eq!(eval_res.int_usize(), 3);
 }
 
 #[test]
@@ -391,7 +407,7 @@ fn string_to_int() {
     eprintln!("Res: {:?}", res);
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
-    assert_eq!(eval_res.int(), 15818151);
+    assert_eq!(eval_res.int_usize(), 15818151);
 }
 
 #[test]
