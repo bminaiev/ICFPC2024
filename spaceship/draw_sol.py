@@ -57,7 +57,7 @@ def main(test_num):
 
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
-    ax.set_title('Points and Path')
+    ax.set_title(f'Test #{test_num}')  # Dynamic title
 
     plt.savefig(output_filename, bbox_inches='tight')
     plt.show()
