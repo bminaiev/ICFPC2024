@@ -57,7 +57,8 @@ def main(test_num):
 
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
-    ax.set_title(f'Test #{test_num}')  # Dynamic title
+    ax.set_title(f'Test #{test_num}; points to visit = {n}; sol len = {m - 1}'
+                 )  # Dynamic title with details
 
     plt.savefig(output_filename, bbox_inches='tight')
     plt.show()
