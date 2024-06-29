@@ -1,7 +1,7 @@
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use std::alloc::System;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io::Write;
 use std::rc::Rc;
 use std::time::Instant;
@@ -356,10 +356,41 @@ async fn send_solution(test_id: usize, sol: &[Point]) {
     protocol::send_msg(&msg).await.unwrap();
 }
 
+fn do_test() -> bool {
+    // x -> all velocities
+    let mut can: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
+    can.insert(0, vec![3, 4].into_iter().collect());
+    for time in 0..10 {
+        let mut new_can: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
+        for (&x, velocities) in can.iter() {
+            for &vel in velocities {
+                for vel_delta in -1..=1 {
+                    let new_vel = vel + vel_delta;
+                    let new_x = x + new_vel;
+                    new_can.entry(new_x).or_default().insert(new_vel);
+                }
+            }
+        }
+        can = new_can;
+        eprintln!("Time: {time}");
+        for (&x, velocities) in can.iter() {
+            eprintln!("x = {x}: {velocities:?}");
+            let min_v = velocities.iter().min().unwrap();
+            let max_v = velocities.iter().max().unwrap();
+            assert_eq!(max_v - min_v + 1, velocities.len() as i64);
+        }
+    }
+    true
+}
+
 pub async fn spaceship_solve() -> bool {
     eprintln!("Hello");
 
     let task_id = 18;
+
+    if do_test() {
+        return true;
+    }
 
     let mut my_score_f = std::fs::File::create("my_score.txt").unwrap();
     for task_id in task_id..=task_id {
