@@ -98,7 +98,7 @@ def transpile_icfp_to_python(tokens):
 def main():
     # Example ICFP string
     icfp_string = "B. SF B$ B$ L\" B$ L\" B$ L# B$ v\" B$ v# v# L# B$ v\" B$ v# v# L$ L# ? B= v# I\" v\" B. v\" B$ v$ B- v# I\" Sl I#"
-    icfp_string = """B. SF B$ B$ L" B$ L" B$ L# B$ v" B$ v# v# L# B$ v" B$ v# v# L$ L# ? B= v# I" v" B. v" B$ v$ B- v# I" Sl I#,"""
+    icfp_string = input()
 
     # Transpile ICFP to Python
     python_code = transpile_icfp_to_python(icfp_string)
