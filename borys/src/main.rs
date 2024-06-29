@@ -1,10 +1,14 @@
 use std::fs;
 
 mod parser;
+mod spaceship;
 
 use anyhow::Result;
 
-use crate::parser::{encode_string, eval, parse_string};
+use crate::{
+    parser::{encode_string, eval, parse_string},
+    spaceship::solve_spaceship,
+};
 
 fn simple_converter() {
     // read from stdin
@@ -24,6 +28,9 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     println!("Hello, world!");
+    if solve_spaceship() {
+        return Ok(());
+    }
 
     let token = dotenv::var("TOKEN")?;
     eprintln!("Token: {:?}", token);
@@ -31,7 +38,7 @@ async fn main() -> Result<()> {
     let client = reqwest::Client::new();
     let res = client
         .post("https://boundvariable.space/communicate")
-        .body(encode_string("get lambdaman21"))
+        .body(encode_string("get spaceship"))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await?;
