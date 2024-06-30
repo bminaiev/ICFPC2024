@@ -1,13 +1,13 @@
 use crate::spaceship::{self, Point};
 use eframe::egui::{CentralPanel, Color32, Context, Pos2, Stroke};
-use egui::Vec2;
+use egui::{FontId, Vec2};
 
 const SCREEN_W: f32 = 3500.0;
 const SCREEN_H: f32 = 2000.0;
 const PIXELS_PER_POINT: f32 = 1.5;
 const DEFAULT_ZOOM_FRAC: f32 = 300.0;
 
-const TEST_ID: usize = 9;
+const TEST_ID: usize = 23;
 
 struct Zoomer {
     zoom: f32,
@@ -40,6 +40,13 @@ impl Zoomer {
         Pos2::new(
             p.x as f32 * self.zoom + self.shift.x,
             -p.y as f32 * self.zoom + self.shift.y,
+        )
+    }
+
+    fn convert_back(&self, pos: Pos2) -> Point {
+        Point::new(
+            ((pos.x - self.shift.x) / self.zoom) as i64,
+            (-(pos.y - self.shift.y) / self.zoom) as i64,
         )
     }
 
@@ -99,6 +106,7 @@ impl Default for App {
         zoomer.ensure_fits(&input);
 
         let solution = spaceship::read_solution(test_id);
+        // spaceship::check_solution(&input, &solution);
 
         Self {
             input,
@@ -145,37 +153,74 @@ impl eframe::App for App {
                 ));
                 let painter = ui.painter();
 
+                {
+                    let clip_rect = painter.clip_rect();
+                    let top_left = self.zoomer.convert_back(clip_rect.min);
+                    let bottom_right = self.zoomer.convert_back(clip_rect.max);
+
+                    let width = (bottom_right.x - top_left.x).abs();
+                    let height = (bottom_right.y - top_left.y).abs();
+
+                    const MAX_GRID: i64 = 50;
+                    let mut every = 1;
+                    while width / every > MAX_GRID || height / every > MAX_GRID {
+                        every *= 10;
+                    }
+                    for xi in top_left.x / every..=bottom_right.x / every {
+                        let x = xi * every;
+                        let pos1 = self.zoomer.convert(Point::new(x, bottom_right.y));
+                        let pos2 = self.zoomer.convert(Point::new(x, top_left.y));
+                        painter.line_segment(
+                            [pos1, pos2],
+                            Stroke {
+                                width: 1.0,
+                                color: Color32::from_gray(128),
+                            },
+                        );
+                        painter.text(
+                            pos1,
+                            egui::Align2::LEFT_BOTTOM,
+                            format!("{}", x),
+                            FontId::default(),
+                            Color32::from_gray(128),
+                        );
+                    }
+                    for yi in bottom_right.y / every..=top_left.y / every {
+                        let y = yi * every;
+                        let pos1 = self.zoomer.convert(Point::new(top_left.x, y));
+                        let pos2 = self.zoomer.convert(Point::new(bottom_right.x, y));
+                        painter.line_segment(
+                            [pos1, pos2],
+                            Stroke {
+                                width: 1.0,
+                                color: Color32::from_gray(128),
+                            },
+                        );
+                        painter.text(
+                            pos1,
+                            egui::Align2::LEFT_BOTTOM,
+                            format!("{}", y),
+                            FontId::default(),
+                            Color32::from_gray(128),
+                        );
+                    }
+                }
+
                 for p in &self.input {
-                    painter.circle(
-                        self.zoomer.convert(*p),
-                        5.0,
-                        Color32::RED,
-                        Stroke {
-                            width: 1.0,
-                            color: Color32::from_rgb(255, 255, 255),
-                        },
-                    );
+                    painter.circle(self.zoomer.convert(*p), 6.0, Color32::RED, Stroke::NONE);
                 }
 
                 for w in self.sol_path.windows(2) {
                     painter.line_segment(
                         [self.zoomer.convert(w[0]), self.zoomer.convert(w[1])],
                         Stroke {
-                            width: 1.0,
+                            width: 2.0,
                             color: Color32::BLUE,
                         },
                     );
                 }
                 for p in self.sol_path.iter() {
-                    painter.circle(
-                        self.zoomer.convert(*p),
-                        2.0,
-                        Color32::BLUE,
-                        Stroke {
-                            width: 1.0,
-                            color: Color32::BLACK,
-                        },
-                    );
+                    painter.circle(self.zoomer.convert(*p), 4.0, Color32::BLUE, Stroke::NONE);
                 }
             });
     }

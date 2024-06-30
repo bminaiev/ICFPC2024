@@ -26,6 +26,10 @@ impl Point {
             _ => panic!("Invalid coord"),
         }
     }
+
+    pub fn new(x: i64, y: i64) -> Self {
+        Self { x, y }
+    }
 }
 
 impl std::ops::Add for Point {
@@ -85,7 +89,7 @@ pub fn read_solution(id: usize) -> Vec<Point> {
     panic!("No solution found");
 }
 
-fn check_solution(pts: &[Point], solution: &[Point], vis_file: &str) {
+pub(crate) fn check_solution_and_save(pts: &[Point], solution: &[Point], vis_file: &str) {
     let mut need_to_visit: HashSet<Point> = pts.iter().cloned().collect();
     let mut f = std::fs::File::create(vis_file).unwrap();
     {
@@ -113,6 +117,20 @@ fn check_solution(pts: &[Point], solution: &[Point], vis_file: &str) {
     assert!(need_to_visit.is_empty())
 }
 
+pub(crate) fn check_solution(pts: &[Point], solution: &[Point]) {
+    let mut need_to_visit: HashSet<Point> = pts.iter().cloned().collect();
+    eprintln!("Total need visit: {}", need_to_visit.len());
+    let mut pos = Point { x: 0, y: 0 };
+    let mut velocity = Point { x: 0, y: 0 };
+    need_to_visit.remove(&pos);
+    for &dir in solution {
+        velocity += dir;
+        pos += velocity;
+        need_to_visit.remove(&pos);
+    }
+    assert!(need_to_visit.is_empty())
+}
+
 pub fn spaceship_draw() {
     for task_id in 1..=25 {
         eprintln!("Task: {}", task_id);
@@ -123,7 +141,7 @@ pub fn spaceship_draw() {
         eprintln!("Need to visit {}, sol len: {}", pts.len(), solution.len());
         // eprintln!("Solution: {:?}", solution);
         let vis_file = format!("../spaceship/spaceship{:02}.viz", task_id);
-        check_solution(&pts, &solution, &vis_file);
+        check_solution_and_save(&pts, &solution, &vis_file);
     }
 }
 
@@ -610,7 +628,7 @@ fn do_test2() -> bool {
 pub async fn spaceship_solve() -> bool {
     eprintln!("Hello");
 
-    let task_id = 1;
+    let task_id = 13;
 
     // if do_test2() {
     //     return true;
@@ -627,14 +645,14 @@ pub async fn spaceship_solve() -> bool {
         eprintln!("Points: {:?}", pts);
         let solution = read_solution(task_id);
 
-        let new_solution = solve(&pts, &solution, task_id, &vis_file);
-        // check_solution(&pts, &new_solution, &vis_file);
+        // let new_solution = solve(&pts, &solution, task_id, &vis_file);
+        check_solution(&pts, &solution);
         // save_solution(task_id, &new_solution);
 
-        writeln!(my_score_f, "{task_id}: {}", new_solution.len()).unwrap();
-        my_score_f.flush().unwrap();
+        // writeln!(my_score_f, "{task_id}: {}", new_solution.len()).unwrap();
+        // my_score_f.flush().unwrap();
 
-        // send_solution(task_id, &new_solution).await;
+        send_solution(task_id, &solution).await;
 
         // eprintln!("Need to visit {}, sol len: {}", pts.len(), solution.len());
         // eprintln!("Solution: {:?}", solution);
