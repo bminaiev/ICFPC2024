@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
     return inf;
   };
   auto DP = [&]() {
-    const int LIM = 10;
+    const int LIM = 40;
     vector dp(n, vector(2 * LIM + 1, vector<int>(2 * LIM + 1, inf)));
     vector pr(n, vector(2 * LIM + 1, vector<Point>(2 * LIM + 1, {-1, -1})));
     dp[0][LIM][LIM] = 0;
@@ -180,11 +180,14 @@ int main(int argc, char** argv) {
         }
       }
       sort(bests.begin(), bests.end());
-      for (int id = 0; id < min(int(bests.size()), 20); id++) {
+      for (int id = 0; id < min(int(bests.size()), 100); id++) {
         auto [ft, sx, sy] = bests[id];
         Point sa = {sx, sy};
-        for (int nx = -LIM; nx <= LIM; nx++) {
-          for (int ny = -LIM; ny <= LIM; ny++) {
+        const int D = 15;
+        for (int nx = max(-LIM, sx - D); nx <= min(LIM, sx + D); nx++) {
+          for (int ny = max(-LIM, sy - D); ny <= min(LIM, sy + D); ny++) {
+        // for (int nx = -LIM; nx <= LIM; nx++) {
+        //   for (int ny = -LIM; ny <= LIM; ny++) {
             Point sb = {nx, ny};
             auto val = ft + Eval(pts[order[i]], pts[order[i + 1]], sa, sb);
             int& to = dp[i + 1][nx + LIM][ny + LIM];
@@ -287,6 +290,7 @@ int main(int argc, char** argv) {
   order = best_order;
   // debug(order);
   speeds = best_speeds;
+  // debug(speeds);
   string res = "";
   for (int i = 1; i < n; i++) {
     Point a = pts[order[i - 1]];
