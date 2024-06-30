@@ -3,7 +3,10 @@ use std::fs;
 mod parser;
 mod protocol;
 pub mod spaceship;
+pub mod tsp;
 mod viz;
+
+pub const TEST_ID: usize = 24;
 
 use anyhow::Result;
 

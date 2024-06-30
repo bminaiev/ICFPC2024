@@ -1,6 +1,7 @@
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use std::alloc::System;
+use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::default;
 use std::io::Write;
@@ -8,7 +9,8 @@ use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::time::Instant;
 
-use crate::protocol;
+use crate::tsp::solve_tsp;
+use crate::{protocol, TEST_ID};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Point {
@@ -366,7 +368,7 @@ fn solve(pts: &[Point], prev_sol: &[Point], task_id: usize, vis_file: &str) -> V
     //         order[from..to].reverse();
     //     }
     // }
-    let precalc = Precalc::new(100);
+    let precalc = Precalc::new(100, false);
     solve_fixed_perm_precalc(&order, &precalc)
 }
 
@@ -520,33 +522,57 @@ fn join_range(r1: &Range<i64>, r2: &Range<i64>) -> Range<i64> {
     }
     r1.start.min(r2.start)..r1.end.max(r2.end)
 }
-struct Precalc {
+pub struct Precalc {
     possible_v: Vec<Vec<Range<i64>>>,
     max_xs: Vec<i64>,
+    simple: Vec<i64>,
 }
 
 impl Precalc {
-    pub fn new(max_time: usize) -> Self {
+    pub fn new(max_time: usize, only_simple: bool) -> Self {
         let mut possible_v = vec![vec![]; max_time + 1];
         let mut max_xs = vec![0i64];
-        possible_v[0].push(0..1);
-        for time in 0..max_time {
-            let new_max_x = max_xs[time] + time as i64 + 1;
-            possible_v[time + 1] = vec![0..0; new_max_x as usize * 2 + 1];
-            max_xs.push(new_max_x);
-            for xi in 0..possible_v[time].len() {
-                let x = xi as i64 - max_xs[time];
-                for v in possible_v[time][xi].clone() {
-                    for dv in -1..=1 {
-                        let new_v = v + dv;
-                        let new_x = x + new_v;
-                        let new_xi = (new_x + new_max_x) as usize;
-                        add_to_range(&mut possible_v[time + 1][new_xi], new_v);
+        if !only_simple {
+            possible_v[0].push(0..1);
+            for time in 0..max_time {
+                let new_max_x = max_xs[time] + time as i64 + 1;
+                possible_v[time + 1] = vec![0..0; new_max_x as usize * 2 + 1];
+                max_xs.push(new_max_x);
+                for xi in 0..possible_v[time].len() {
+                    let x = xi as i64 - max_xs[time];
+                    for v in possible_v[time][xi].clone() {
+                        for dv in -1..=1 {
+                            let new_v = v + dv;
+                            let new_x = x + new_v;
+                            let new_xi = (new_x + new_max_x) as usize;
+                            add_to_range(&mut possible_v[time + 1][new_xi], new_v);
+                        }
                     }
                 }
             }
         }
-        Self { possible_v, max_xs }
+        let mut simple = vec![0; max_time * max_time];
+        for delta in 0..simple.len() {
+            let mut sum = 0;
+            for time in 0.. {
+                sum += time;
+                if sum >= delta {
+                    simple[delta] = time as i64;
+                    break;
+                }
+            }
+        }
+        Self {
+            possible_v,
+            max_xs,
+            simple,
+        }
+    }
+
+    pub fn get_simple(&self, v: Point) -> usize {
+        let vx = v.x.unsigned_abs() as usize;
+        let vy = v.y.unsigned_abs() as usize;
+        self.simple[vx].max(self.simple[vy]) as usize
     }
 
     pub fn get_x_range(&self, time: usize) -> Range<i64> {
@@ -581,6 +607,12 @@ impl Precalc {
         vs.start <= need_v && need_v < vs.end
     }
 
+    pub fn is_possible_any_v(&self, time: usize, x: i64, start_v: i64) -> bool {
+        let x = x - time as i64 * start_v;
+        let vs = self.get_vs(time, x);
+        !vs.is_empty()
+    }
+
     pub fn reconstruct(
         &self,
         prev_v_range: Range<i64>,
@@ -613,7 +645,7 @@ impl Precalc {
 }
 
 fn do_test2() -> bool {
-    let precalc = Precalc::new(10);
+    let precalc = Precalc::new(10, false);
     for time in 0..=10 {
         eprintln!("Time: {time}");
         let xs = precalc.get_x_range(time);
@@ -625,16 +657,114 @@ fn do_test2() -> bool {
     true
 }
 
+fn do_tsp(test_id: usize, pts: &[Point]) {
+    let order_filename = format!("../spaceship/spaceship{:02}_order.txt", test_id);
+
+    let order: Option<Vec<usize>> = if let Ok(input) = std::fs::read_to_string(order_filename) {
+        let mut order: Vec<usize> = input.lines().map(|line| line.parse().unwrap()).collect();
+        order.remove(0);
+        Some(order)
+    } else {
+        None
+    };
+    let sol = solve_tsp(pts, order);
+    let mut f =
+        std::fs::File::create(format!("../spaceship/spaceship{:02}_order.txt", test_id)).unwrap();
+    writeln!(f, "{}", sol.len()).unwrap();
+    for id in sol {
+        writeln!(f, "{}", id).unwrap();
+    }
+}
+
+pub fn estimate_dist(prev: Point, cur: Point, next: Point, precalc: &Precalc) -> usize {
+    let av_dist = estimate_dist_simple(prev, cur, precalc) as i64 + 10;
+    let velocity = Point {
+        x: (cur.x - prev.x) / av_dist,
+        y: (cur.y - prev.y) / av_dist,
+    };
+    let need_x = next.x - cur.x;
+    let need_y = next.y - cur.y;
+    for time in 0.. {
+        if precalc.is_possible_any_v(time, need_x, velocity.x)
+            && precalc.is_possible_any_v(time, need_y, velocity.y)
+        {
+            return time;
+        }
+    }
+    unreachable!()
+}
+
+pub fn estimate_dist_simple(cur: Point, next: Point, precalc: &Precalc) -> usize {
+    let need_x = next.x - cur.x;
+    let need_y = next.y - cur.y;
+    precalc.get_simple(Point {
+        x: need_x,
+        y: need_y,
+    })
+    // for time in 0.. {
+    //     if precalc.is_possible_any_v(time, need_x, 0) && precalc.is_possible_any_v(time, need_y, 0)
+    //     {
+    //         assert!(
+    //             time == precalc.get_simple(Point {
+    //                 x: need_x,
+    //                 y: need_y
+    //             })
+    //         );
+    //         return time;
+    //     }
+    // }
+    // unreachable!()
+}
+
+fn calc_stats(pts: &[Point], sol: &[Point]) {
+    let precalc = Precalc::new(100, false);
+
+    let mut pos = Point::ZERO;
+    let mut velocity = Point::ZERO;
+    let mut need_to_visit: HashSet<Point> = pts.iter().cloned().collect();
+    let mut ordered_pts = vec![pos];
+    let mut dists = vec![];
+    let mut prev_step = 0;
+    for (step, &dir) in sol.iter().enumerate() {
+        velocity += dir;
+        pos += velocity;
+        if need_to_visit.remove(&pos) {
+            ordered_pts.push(pos);
+            dists.push(step - prev_step);
+            prev_step = step;
+        }
+    }
+    let mut sum_est_diff = 0;
+    for i in 0..dists.len() - 1 {
+        let p1 = ordered_pts[i];
+        let p2 = ordered_pts[i + 1];
+        let p3 = ordered_pts[i + 2];
+        let d23 = dists[i + 1];
+        let est = estimate_dist(p1, p2, p3, &precalc);
+        sum_est_diff += (d23 as i64 - est as i64).abs();
+        eprintln!(
+            "DX1={}, DX2={}, DY1={}, DY2={}, d23={d23}, est={est}",
+            p2.x - p1.x,
+            p3.x - p2.x,
+            p2.y - p1.y,
+            p3.y - p2.y,
+        );
+    }
+    eprintln!(
+        "AV ESTIMATE DIFF: {}",
+        sum_est_diff as f64 / (dists.len() - 1) as f64
+    );
+}
+
 pub async fn spaceship_solve() -> bool {
     eprintln!("Hello");
 
-    let task_id = 13;
+    let task_id = TEST_ID;
 
     // if do_test2() {
     //     return true;
     // }
 
-    let mut my_score_f = std::fs::File::create("my_score.txt").unwrap();
     for task_id in task_id..=task_id {
         // let vis_file = format!("../spaceship/spaceship{:02}.viz", task_id);
         let vis_file = "spaceship00.viz";
@@ -642,17 +772,21 @@ pub async fn spaceship_solve() -> bool {
         eprintln!("Task: {}", task_id);
         let pts = read_input(task_id);
 
-        eprintln!("Points: {:?}", pts);
-        let solution = read_solution(task_id);
+        // eprintln!("Points: {:?}", pts);
+        for _ in 0..100 {
+            do_tsp(task_id, &pts);
+        }
+        // let solution = read_solution(task_id);
+        // calc_stats(&pts, &solution);
 
         // let new_solution = solve(&pts, &solution, task_id, &vis_file);
-        check_solution(&pts, &solution);
+        // check_solution(&pts, &solution);
         // save_solution(task_id, &new_solution);
 
         // writeln!(my_score_f, "{task_id}: {}", new_solution.len()).unwrap();
         // my_score_f.flush().unwrap();
 
-        send_solution(task_id, &solution).await;
+        // send_solution(task_id, &solution).await;
 
         // eprintln!("Need to visit {}, sol len: {}", pts.len(), solution.len());
         // eprintln!("Solution: {:?}", solution);
@@ -665,7 +799,7 @@ pub async fn spaceship_solve() -> bool {
 
 #[test]
 fn precalc_test() {
-    let precalc = Precalc::new(30);
+    let precalc = Precalc::new(30, false);
     let dx = 1;
     let time = 6;
     let start_v = -6..7;
