@@ -122,6 +122,13 @@ int main(int argc, char** argv) {
     order[it] = idx;
     sp = pts[order[it]] - pts[order[it - 1]];
   }
+  if (test_id == 9) {
+    // order = {0, 2, 64, 69, 72, 68, 100, 55, 51, 90, 5, 38, 93, 46, 75, 1, 95, 81, 3, 62, 66, 61, 91, 54, 59, 29, 74, 27, 40, 43, 22, 65, 16, 84, 50, 71, 85, 34, 35, 52, 33, 57, 76, 13, 20, 80, 45, 47, 60, 12, 14, 7, 31, 98, 87, 73, 21, 30, 23, 99, 94, 49, 4, 83, 11, 88, 53, 79, 82, 77, 89, 97, 44, 18, 96, 67, 36, 6, 17, 28, 63, 70, 42, 78, 56, 37, 24, 10, 19, 92, 32, 9, 15, 26, 39, 58, 8, 48, 86, 41, 25};
+    order = {0, 2, 64, 69, 72, 68, 100, 55, 51, 90, 5, 38, 93, 46, 75, 1, 95, 81, 3, 62, 66, 61, 91, 54, 59, 74, 29, 27, 40, 43, 22, 65, 16, 84, 50, 71, 85, 34, 35, 52, 33, 57, 76, 13, 20, 80, 45, 47, 60, 12, 14, 7, 31, 98, 87, 73, 21, 30, 23, 99, 94, 11, 83, 4, 88, 53, 49, 79, 82, 77, 89, 97, 44, 18, 96, 67, 36, 6, 17, 28, 63, 70, 42, 78, 56, 37, 24, 10, 19, 92, 32, 9, 15, 26, 39, 58, 8, 48, 86, 41, 25};
+  }
+  // if (test_id == 10) {
+  //   order = {0, 24, 74, 51, 45, 62, 18, 12, 5, 37, 3, 40, 46, 92, 88, 6, 90, 4, 30, 36, 97, 73, 47, 63, 22, 32, 53, 8, 65, 15, 71, 89, 77, 11, 56, 16, 57, 64, 84, 19, 85, 42, 49, 17, 7, 81, 9, 20, 14, 28, 72, 93, 66, 2, 98, 87, 58, 61, 33, 13, 35, 79, 54, 44, 1, 48, 96, 80, 29, 83, 67, 26, 39, 43, 55, 100, 52, 25, 78, 68, 60, 21, 95, 86, 75, 59, 70, 50, 38, 41, 94, 99, 82, 91, 34, 76, 69, 31, 23, 10, 27};
+  // }
   for (int i = 1; i < n; i++) {
     // debug(pts[order[i]], pts[order[i]] - pts[order[i - 1]]);
   }
@@ -162,22 +169,28 @@ int main(int argc, char** argv) {
     vector pr(n, vector(2 * LIM + 1, vector<Point>(2 * LIM + 1, {-1, -1})));
     dp[0][LIM][LIM] = 0;
     for (int i = 0; i < n - 1; i++) {
+      vector<array<int, 3>> bests;
       for (int sx = -LIM; sx <= LIM; sx++) {
         for (int sy = -LIM; sy <= LIM; sy++) {
           auto ft = dp[i][sx + LIM][sy + LIM];
           if (ft == inf) {
             continue;
           }
-          Point sa = {sx, sy};
-          for (int nx = -LIM; nx <= LIM; nx++) {
-            for (int ny = -LIM; ny <= LIM; ny++) {
-              Point sb = {nx, ny};
-              auto val = ft + Eval(pts[order[i]], pts[order[i + 1]], sa, sb);
-              int& to = dp[i + 1][nx + LIM][ny + LIM];
-              if (val < to) {
-                to = val;
-                pr[i + 1][nx + LIM][ny + LIM] = sa;
-              }
+          bests.push_back({ft, sx, sy});
+        }
+      }
+      sort(bests.begin(), bests.end());
+      for (int id = 0; id < min(int(bests.size()), 20); id++) {
+        auto [ft, sx, sy] = bests[id];
+        Point sa = {sx, sy};
+        for (int nx = -LIM; nx <= LIM; nx++) {
+          for (int ny = -LIM; ny <= LIM; ny++) {
+            Point sb = {nx, ny};
+            auto val = ft + Eval(pts[order[i]], pts[order[i + 1]], sa, sb);
+            int& to = dp[i + 1][nx + LIM][ny + LIM];
+            if (val < to) {
+              to = val;
+              pr[i + 1][nx + LIM][ny + LIM] = sa;
             }
           }
         }
@@ -196,7 +209,7 @@ int main(int argc, char** argv) {
       }
     }
     assert(best < inf);
-    // debug(test_id, clock(), best);
+    debug(test_id, clock(), best);
     for (int i = n - 1; i > 0; i--) {
       speeds[order[i]] = {bx, by};
       auto from = pr[i][bx + LIM][by + LIM];
@@ -214,10 +227,10 @@ int main(int argc, char** argv) {
   int best_score = score;
   auto best_order = order;
   auto best_speeds = speeds;
-  const double TL = 1.0;
+  const double TL = 0.0;
   int it = 0;
   while (1.0 * clock() / CLOCKS_PER_SEC < TL) {
-    if (it % 100000 == 0) {
+    if (it % 100 == 0) {
       auto t = 1.0 * clock() / CLOCKS_PER_SEC;
       cur_temp = init_temp * pow(final_temp / init_temp, t / TL);
       debug(test_id, it, t, cur_temp, score, best_score);
@@ -228,10 +241,15 @@ int main(int argc, char** argv) {
       int j;
       do {
         j = rng() % (n - 1) + 1;
-      } while (i == j);
+      } while (i == j);// || abs(i - j) > 5);
       int me = order[i];
       order.erase(order.begin() + i);
       order.insert(order.begin() + j, me);
+      if ((pts[order[j]] - pts[order[j - 1]]).abs2() > 2500) {
+        order.erase(order.begin() + j);
+        order.insert(order.begin() + i, me);
+        continue;
+      }
       int delta = DP();
       delta -= score;
       if (delta <= 0) {// || (delta > 0 && urd(rng) < exp(-1.0 * delta / cur_temp))) {
@@ -245,7 +263,10 @@ int main(int argc, char** argv) {
       do {
         i = rng() % (n - 1) + 1;
         j = rng() % (n - 1) + 1;
-      } while (i >= j);
+      } while (i >= j);// || abs(i - j) > 5);
+      if ((pts[order[j]] - pts[order[i - 1]]).abs2() > 2500) {
+        continue;
+      }
       reverse(order.begin() + i, order.begin() + j + 1);
       int delta = DP();
       delta -= score;
@@ -264,6 +285,7 @@ int main(int argc, char** argv) {
   }
   debug(best_score);
   order = best_order;
+  // debug(order);
   speeds = best_speeds;
   string res = "";
   for (int i = 1; i < n; i++) {
