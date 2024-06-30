@@ -70,7 +70,7 @@ pub fn solve_tsp(pts: &[Point], order: Option<Vec<usize>>) -> Vec<usize> {
             .map(|other| dist_simple(pts[me], pts[other]))
             .collect();
         dists.sort_unstable();
-        at_most_dist = at_most_dist.max(dists[NEIGHBOURS]);
+        at_most_dist = at_most_dist.max(dists[NEIGHBOURS.min(dists.len() - 1)]);
     }
     let closest: Vec<_> = (0..pts.len())
         .into_par_iter()
@@ -100,7 +100,7 @@ pub fn solve_tsp(pts: &[Point], order: Option<Vec<usize>>) -> Vec<usize> {
     // let start = Instant::now();
     let mut it = 0;
     let mut sa =
-        SimulatedAnnealing::new(600.0, SearchFor::MinimumScore, 100.01, 0.01, sum_len as f64);
+        SimulatedAnnealing::new(200.0, SearchFor::MinimumScore, 100.01, 0.01, sum_len as f64);
     while sa.should_continue() {
         it += 1;
         let from = rng.gen_range(2..a.len() - 2);
