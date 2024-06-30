@@ -11,13 +11,13 @@ use std::time::Instant;
 use crate::protocol;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-struct Point {
-    x: i64,
-    y: i64,
+pub struct Point {
+    pub x: i64,
+    pub y: i64,
 }
 
 impl Point {
-    const ZERO: Point = Point { x: 0, y: 0 };
+    pub const ZERO: Point = Point { x: 0, y: 0 };
 
     pub fn get_coord(&self, coord: usize) -> i64 {
         match coord {
@@ -44,7 +44,7 @@ impl std::ops::AddAssign for Point {
     }
 }
 
-fn read_input(id: usize) -> Vec<Point> {
+pub fn read_input(id: usize) -> Vec<Point> {
     let filename = format!("../spaceship/spaceship{:02}.in", id);
     let input = std::fs::read_to_string(filename).unwrap();
     input
@@ -66,7 +66,15 @@ fn conv_dir(c: u8) -> Point {
     Point { x, y }
 }
 
-fn read_solution(id: usize) -> Vec<Point> {
+pub fn read_solution(id: usize) -> Vec<Point> {
+    {
+        let gena_path = format!("../gena/{:02}.out", id);
+        if let Ok(input) = std::fs::read_to_string(gena_path) {
+            let input: Vec<_> = input.split_whitespace().collect();
+            let input = input[input.len() - 1];
+            return input.bytes().map(conv_dir).collect();
+        }
+    }
     for suffix in ["_borys", ""].iter() {
         let filename = format!("../spaceship/spaceship{:02}{suffix}.out", id);
         eprintln!("Reading from file: {:?}", filename);

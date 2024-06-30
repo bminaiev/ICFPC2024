@@ -2,7 +2,8 @@ use std::fs;
 
 mod parser;
 mod protocol;
-mod spaceship;
+pub mod spaceship;
+mod viz;
 
 use anyhow::Result;
 
@@ -34,9 +35,10 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     println!("Hello, world!");
-    if spaceship_solve().await {
-        return Ok(());
-    }
+    viz::viz_main().unwrap();
+    // if spaceship_solve().await {
+    //     return Ok(());
+    // }
 
     // test();
     // send_msg("get spaceship").await?;
