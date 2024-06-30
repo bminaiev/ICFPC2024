@@ -2,7 +2,9 @@ use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use std::alloc::System;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::default;
 use std::io::Write;
+use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -302,43 +304,134 @@ fn solve(pts: &[Point], prev_sol: &[Point], task_id: usize, vis_file: &str) -> V
     //     }
     // }
 
-    const BASE_BEAM: usize = 100;
-    let mut cur_sol_len = solve_fixed_perm(&order, Point::ZERO, BASE_BEAM).len();
-    let start = Instant::now();
-    for iter in 1.. {
-        if iter % 100 == 0 {
-            eprintln!("Iter: {}", iter);
-        }
-        if start.elapsed().as_secs() > 1000 {
-            break;
-        }
-        // let sol = solve_fixed_perm(&order);
-        let from = rng.gen_range(0..order.len());
-        let len = rng.gen_range(2..=5);
-        let to = from + len;
-        if to > order.len() {
-            continue;
-        }
-        order[from..to].reverse();
-        // let mut new_order = order.clone();
-        // let elem = new_order.remove(pos);
-        // let new_pos = rng.gen_range(0..new_order.len() + 1);
-        // new_order.insert(new_pos, elem);
-        let new_sol = solve_fixed_perm(&order, Point::ZERO, BASE_BEAM);
-        if new_sol.len() < cur_sol_len {
-            cur_sol_len = new_sol.len();
-            eprintln!("New sol len: {}", cur_sol_len);
-            if new_sol.len() < prev_sol.len() {
-                check_solution(&pts, &new_sol, &vis_file);
-                save_solution(task_id, &new_sol);
-            } else {
-                eprintln!("Not going to save it..");
+    // const BASE_BEAM: usize = 100;
+    // let mut cur_sol_len = solve_fixed_perm(&order, Point::ZERO, BASE_BEAM).len();
+    // let start = Instant::now();
+    // for iter in 1.. {
+    //     if iter % 100 == 0 {
+    //         eprintln!("Iter: {}", iter);
+    //     }
+    //     if start.elapsed().as_secs() > 1000 {
+    //         break;
+    //     }
+    //     // let sol = solve_fixed_perm(&order);
+    //     let from = rng.gen_range(0..order.len());
+    //     let len = rng.gen_range(2..=5);
+    //     let to = from + len;
+    //     if to > order.len() {
+    //         continue;
+    //     }
+    //     order[from..to].reverse();
+    //     // let mut new_order = order.clone();
+    //     // let elem = new_order.remove(pos);
+    //     // let new_pos = rng.gen_range(0..new_order.len() + 1);
+    //     // new_order.insert(new_pos, elem);
+    //     let new_sol = solve_fixed_perm(&order, Point::ZERO, BASE_BEAM);
+    //     if new_sol.len() < cur_sol_len {
+    //         cur_sol_len = new_sol.len();
+    //         eprintln!("New sol len: {}", cur_sol_len);
+    //         if new_sol.len() < prev_sol.len() {
+    //             check_solution(&pts, &new_sol, &vis_file);
+    //             save_solution(task_id, &new_sol);
+    //         } else {
+    //             eprintln!("Not going to save it..");
+    //         }
+    //     } else {
+    //         order[from..to].reverse();
+    //     }
+    // }
+    let precalc = Precalc::new(100);
+    solve_fixed_perm_precalc(&order, &precalc)
+}
+
+#[derive(Clone, Debug)]
+struct State {
+    pos: Point,
+    v_range: Range<Point>,
+    time: usize,
+}
+
+fn solve_fixed_perm_precalc(pts: &[Point], precalc: &Precalc) -> Vec<Point> {
+    let mut states = vec![State {
+        pos: Point::ZERO,
+        v_range: Point::ZERO..Point { x: 1, y: 1 },
+        time: 0,
+    }];
+    for (i, next_p) in pts.iter().enumerate() {
+        let state = states.last().unwrap();
+        let need_x = next_p.x - state.pos.x;
+        let mut good = 5;
+        for time in 0.. {
+            let default_xs_range =
+                state.v_range.start.x * time as i64..(state.v_range.end.x - 1) * time as i64;
+            let x_range = need_x - default_xs_range.end..need_x - default_xs_range.start + 1;
+            let default_ys_range =
+                state.v_range.start.y * time as i64..(state.v_range.end.y - 1) * time as i64;
+            let y_range = next_p.y - default_ys_range.end..next_p.y - default_ys_range.start + 1;
+            let new_vx = precalc.get_vs_range(time, x_range);
+            let new_vy = precalc.get_vs_range(time, y_range);
+            if new_vx.is_empty() || new_vy.is_empty() {
+                continue;
             }
-        } else {
-            order[from..to].reverse();
+            good -= 1;
+            if good == 0 {
+                states.push(State {
+                    pos: *next_p,
+                    v_range: Point {
+                        x: new_vx.start,
+                        y: new_vy.start,
+                    }..Point {
+                        x: new_vx.end,
+                        y: new_vy.end,
+                    },
+                    time: state.time + time,
+                });
+                break;
+            }
         }
+        eprintln!(
+            "Iter: {i}/{}, state = {:?}",
+            pts.len(),
+            states.last().unwrap()
+        );
     }
-    solve_fixed_perm(&order, Point::ZERO, BASE_BEAM)
+    let mut res = vec![];
+    let mut cur_v = states.last().unwrap().v_range.start;
+    for w in states.windows(2).rev() {
+        let prev = &w[0];
+        let cur = &w[1];
+        let sol_x = precalc.reconstruct(
+            prev.v_range.start.x..prev.v_range.end.x,
+            cur.time - prev.time,
+            cur.pos.x - prev.pos.x,
+            cur_v.x,
+        );
+        let sol_y = precalc.reconstruct(
+            prev.v_range.start.y..prev.v_range.end.y,
+            cur.time - prev.time,
+            cur.pos.y - prev.pos.y,
+            cur_v.y,
+        );
+        assert_eq!(sol_x.len(), sol_y.len());
+        let mut res_part = vec![];
+        for (&dx, &dy) in sol_x.iter().zip(sol_y.iter()) {
+            res_part.push(Point { x: dx, y: dy });
+            cur_v += Point { x: -dx, y: -dy };
+        }
+        res.extend(res_part.into_iter().rev());
+        assert!(prev.v_range.start.x <= cur_v.x && cur_v.x < prev.v_range.end.x);
+        assert!(prev.v_range.start.y <= cur_v.y && cur_v.y < prev.v_range.end.y);
+    }
+    {
+        let mut pos = Point::ZERO;
+        let mut velocity = Point::ZERO;
+        for &dir in res.iter() {
+            velocity += dir;
+            pos += velocity;
+        }
+        assert_eq!(pos, *pts.last().unwrap());
+    }
+    res
 }
 
 fn run_python_viz(test_id: usize) {
@@ -383,14 +476,137 @@ fn do_test() -> bool {
     true
 }
 
+fn add_to_range(r: &mut Range<i64>, x: i64) {
+    if r.is_empty() {
+        *r = x..x + 1;
+    } else {
+        r.start = r.start.min(x);
+        r.end = r.end.max(x + 1);
+    }
+}
+
+fn join_range(r1: &Range<i64>, r2: &Range<i64>) -> Range<i64> {
+    if r1.is_empty() {
+        return r2.clone();
+    }
+    if r2.is_empty() {
+        return r1.clone();
+    }
+    r1.start.min(r2.start)..r1.end.max(r2.end)
+}
+struct Precalc {
+    possible_v: Vec<Vec<Range<i64>>>,
+    max_xs: Vec<i64>,
+}
+
+impl Precalc {
+    pub fn new(max_time: usize) -> Self {
+        let mut possible_v = vec![vec![]; max_time + 1];
+        let mut max_xs = vec![0i64];
+        possible_v[0].push(0..1);
+        for time in 0..max_time {
+            let new_max_x = max_xs[time] + time as i64 + 1;
+            possible_v[time + 1] = vec![0..0; new_max_x as usize * 2 + 1];
+            max_xs.push(new_max_x);
+            for xi in 0..possible_v[time].len() {
+                let x = xi as i64 - max_xs[time];
+                for v in possible_v[time][xi].clone() {
+                    for dv in -1..=1 {
+                        let new_v = v + dv;
+                        let new_x = x + new_v;
+                        let new_xi = (new_x + new_max_x) as usize;
+                        add_to_range(&mut possible_v[time + 1][new_xi], new_v);
+                    }
+                }
+            }
+        }
+        Self { possible_v, max_xs }
+    }
+
+    pub fn get_x_range(&self, time: usize) -> Range<i64> {
+        let max_x = self.max_xs[time];
+        -max_x..max_x + 1
+    }
+
+    pub fn get_vs(&self, time: usize, x: i64) -> Range<i64> {
+        let max_x = self.max_xs[time];
+        if x.abs() > max_x {
+            return 0..0;
+        }
+        let xi = (x + max_x) as usize;
+        self.possible_v[time][xi].clone()
+    }
+
+    pub fn get_vs_range(&self, time: usize, x_range: Range<i64>) -> Range<i64> {
+        let mut res = 0..0;
+        // TODO: optimize
+        for x in x_range {
+            let cur = self.get_vs(time, x);
+            res = join_range(&res, &cur);
+        }
+        res
+    }
+
+    pub fn is_possible(&self, time: usize, x: i64, start_v: i64, end_v: i64) -> bool {
+        let x = x - time as i64 * start_v;
+        let need_v = end_v - start_v;
+        let vs = self.get_vs(time, x);
+        eprintln!("Is possible time={time} x={x} start_v={start_v} end_v={end_v} vs={vs:?}");
+        vs.start <= need_v && need_v < vs.end
+    }
+
+    pub fn reconstruct(
+        &self,
+        prev_v_range: Range<i64>,
+        time: usize,
+        mut x: i64,
+        need_v: i64,
+    ) -> Vec<i64> {
+        eprintln!("Reconstruct: prev_v={prev_v_range:?} time={time} need_x={x} need_v={need_v}");
+        for first_v in prev_v_range {
+            if self.is_possible(time, x, first_v, need_v) {
+                let mut cur_v = first_v;
+                let mut res = vec![];
+                for t in 0..time {
+                    for dv in -1..=1 {
+                        let new_v = cur_v + dv;
+                        if self.is_possible(time - t - 1, x - new_v, new_v, need_v) {
+                            res.push(dv);
+                            cur_v = new_v;
+                            x -= new_v;
+                            break;
+                        }
+                    }
+                    assert_eq!(res.len(), t + 1);
+                }
+                return res;
+            }
+        }
+        unreachable!();
+    }
+}
+
+fn do_test2() -> bool {
+    let precalc = Precalc::new(10);
+    for time in 0..=10 {
+        eprintln!("Time: {time}");
+        let xs = precalc.get_x_range(time);
+        for x in xs {
+            let vs = precalc.get_vs(time, x);
+            eprintln!("x = {x}: {vs:?}");
+        }
+    }
+    true
+}
+
 pub async fn spaceship_solve() -> bool {
     eprintln!("Hello");
 
-    let task_id = 18;
+    let task_id = 1;
 
-    if do_test() {
-        return true;
-    }
+    // if do_test2() {
+    //     return true;
+    // }
 
     let mut my_score_f = std::fs::File::create("my_score.txt").unwrap();
     for task_id in task_id..=task_id {
@@ -419,4 +635,14 @@ pub async fn spaceship_solve() -> bool {
 
     // run_python_viz(0);
     true
+}
+
+#[test]
+fn precalc_test() {
+    let precalc = Precalc::new(30);
+    let dx = 1;
+    let time = 6;
+    let start_v = -6..7;
+
+    // precalc.get_vs_range(time, x_range)
 }
