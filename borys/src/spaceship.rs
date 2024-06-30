@@ -9,6 +9,7 @@ use std::io::Write;
 use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::time::Instant;
+use tokio::task;
 
 use crate::local_solver::LocalSolver;
 use crate::tsp::solve_tsp;
@@ -732,33 +733,37 @@ fn calc_stats_old(pts: &[Point], sol: &[Point]) {
         pos += velocity;
         if need_to_visit.remove(&pos) {
             ordered_pts.push(pos);
+            let d = step - prev_step;
+            if d > 4 {
+                eprintln!("D = {d}. pos = {pos:?}");
+            }
             dists.push(step - prev_step);
             prev_step = step;
         }
     }
-    let mut sum_est_diff = 0;
-    for i in 0..dists.len() - 1 {
-        let p1 = ordered_pts[i];
-        let p2 = ordered_pts[i + 1];
-        let p3 = ordered_pts[i + 2];
-        let d23 = dists[i + 1];
-        let est = estimate_dist(p1, p2, p3, &precalc);
-        sum_est_diff += (d23 as i64 - est as i64).abs();
-        eprintln!(
-            "DX1={}, DX2={}, DY1={}, DY2={}, d23={d23}, est={est}",
-            p2.x - p1.x,
-            p3.x - p2.x,
-            p2.y - p1.y,
-            p3.y - p2.y,
-        );
-    }
-    eprintln!(
-        "AV ESTIMATE DIFF: {}",
-        sum_est_diff as f64 / (dists.len() - 1) as f64
-    );
+    // let mut sum_est_diff = 0;
+    // for i in 0..dists.len() - 1 {
+    //     let p1 = ordered_pts[i];
+    //     let p2 = ordered_pts[i + 1];
+    //     let p3 = ordered_pts[i + 2];
+    //     let d23 = dists[i + 1];
+    //     let est = estimate_dist(p1, p2, p3, &precalc);
+    //     sum_est_diff += (d23 as i64 - est as i64).abs();
+    //     eprintln!(
+    //         "DX1={}, DX2={}, DY1={}, DY2={}, d23={d23}, est={est}",
+    //         p2.x - p1.x,
+    //         p3.x - p2.x,
+    //         p2.y - p1.y,
+    //         p3.y - p2.y,
+    //     );
+    // }
+    // eprintln!(
+    //     "AV ESTIMATE DIFF: {}",
+    //     sum_est_diff as f64 / (dists.len() - 1) as f64
+    // );
 }
 
-fn calc_stats(pts: &[Point], sol: &[Point]) {
+fn calc_stats(pts: &[Point], sol: &[Point], test_id: usize) {
     let local_solver = LocalSolver::new();
 
     eprintln!("Sol len: {}", sol.len());
@@ -788,7 +793,7 @@ fn calc_stats(pts: &[Point], sol: &[Point]) {
             prev_step = step;
         }
     }
-    const LIMIT: i64 = 3;
+    const LIMIT: i64 = 4;
     let mut i = 0;
     while i < ordered_pts.len() {
         let good_sizes: Vec<_> = (3..100)
@@ -820,7 +825,8 @@ fn calc_stats(pts: &[Point], sol: &[Point]) {
         i += 1;
     }
 
-    let mut f = std::fs::File::create("../spaceship/spaceship19_order.txt").unwrap();
+    let mut f =
+        std::fs::File::create(format!("../spaceship/spaceship{test_id}_order.txt")).unwrap();
     writeln!(f, "{}", real_order.len()).unwrap();
     for id in real_order {
         writeln!(f, "{}", id).unwrap();
@@ -845,10 +851,10 @@ pub async fn spaceship_solve() -> bool {
 
         // eprintln!("Points: {:?}", pts);
         // for _ in 0..100 {
-        // do_tsp(task_id, &pts);
+        do_tsp(task_id, &pts);
         // }
-        let solution = read_solution(task_id);
-        calc_stats(&pts, &solution);
+        // let solution = read_solution(task_id);
+        // calc_stats_old(&pts, &solution);
 
         // let new_solution = solve(&pts, &solution, task_id, &vis_file);
         // check_solution(&pts, &solution);
