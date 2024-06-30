@@ -39,8 +39,8 @@ struct TPoint {
     return a.x * b.y - a.y * b.x;
   }
 
-  inline T abs2() const {
-    return x * x + y * y;
+  inline int64_t abs2() const {
+    return int64_t(x) * x + int64_t(y) * y;
   }
 
   inline bool operator<(const TPoint& rhs) const {
@@ -105,9 +105,9 @@ int main(int argc, char** argv) {
       if (used[j]) {
         continue;
       }
-      // if (pts[order[it - 1]] == Point{-165, -173} && pts[j] == Point{-167, -172}) {
-      //   continue;
-      // }
+      if (pts[order[it - 1]] == Point{58, -29} && pts[j] != Point{61, -33}) {
+        continue;
+      }
       auto delta = pts[j] - pts[order[it - 1]];
       // if ((delta - sp).abs2() > 2) {
       //   continue;
@@ -129,12 +129,14 @@ int main(int argc, char** argv) {
   // if (test_id == 10) {
   //   order = {0, 24, 74, 51, 45, 62, 18, 12, 5, 37, 3, 40, 46, 92, 88, 6, 90, 4, 30, 36, 97, 73, 47, 63, 22, 32, 53, 8, 65, 15, 71, 89, 77, 11, 56, 16, 57, 64, 84, 19, 85, 42, 49, 17, 7, 81, 9, 20, 14, 28, 72, 93, 66, 2, 98, 87, 58, 61, 33, 13, 35, 79, 54, 44, 1, 48, 96, 80, 29, 83, 67, 26, 39, 43, 55, 100, 52, 25, 78, 68, 60, 21, 95, 86, 75, 59, 70, 50, 38, 41, 94, 99, 82, 91, 34, 76, 69, 31, 23, 10, 27};
   // }
+  debug("found order", clock());
   for (int i = 1; i < n; i++) {
     // debug(pts[order[i]], pts[order[i]] - pts[order[i - 1]]);
   }
+  // n = min(n, 10000);
   // return 0;
   const int M = 200;
-  const int inf = int(1e6);
+  const int inf = int(1e8);
   vector fmin(M + 1, vector<int>(2 * M + 1, +inf));
   vector fmax(M + 1, vector<int>(2 * M + 1, -inf));
   fmin[0][M] = fmax[0][M] = 0;
@@ -164,60 +166,87 @@ int main(int argc, char** argv) {
     return inf;
   };
   auto DP = [&]() {
-    const int LIM = 40;
-    vector dp(n, vector(2 * LIM + 1, vector<int>(2 * LIM + 1, inf)));
-    vector pr(n, vector(2 * LIM + 1, vector<Point>(2 * LIM + 1, {-1, -1})));
-    dp[0][LIM][LIM] = 0;
+    const int LIM = 100;
+    const int B = 100;
+    const int D = 10;
+    // vector dp(n, vector(2 * LIM + 1, vector<int>(2 * LIM + 1, inf)));
+    // vector pr(n, vector(2 * LIM + 1, vector<Point>(2 * LIM + 1, {-1, -1})));
+    // dp[0][LIM][LIM] = 0;
+    vector<vector<array<int, 5>>> bests(n);
+    bests[0].push_back({0, 0, 0, -1, -1});
     for (int i = 0; i < n - 1; i++) {
-      vector<array<int, 3>> bests;
-      for (int sx = -LIM; sx <= LIM; sx++) {
-        for (int sy = -LIM; sy <= LIM; sy++) {
-          auto ft = dp[i][sx + LIM][sy + LIM];
-          if (ft == inf) {
-            continue;
-          }
-          bests.push_back({ft, sx, sy});
-        }
-      }
-      sort(bests.begin(), bests.end());
-      for (int id = 0; id < min(int(bests.size()), 100); id++) {
-        auto [ft, sx, sy] = bests[id];
+      if (i % 1000 == 0) debug(i, clock(), bests[i].size(), bests[i][0]);
+      vector dp(2 * LIM + 1, vector<int>(2 * LIM + 1, inf));
+      vector pr(2 * LIM + 1, vector<Point>(2 * LIM + 1, {-1, -1}));
+      for (int id = 0; id < int(bests[i].size()); id++) {
+        auto [ft, sx, sy, px, py] = bests[i][id];
         Point sa = {sx, sy};
-        const int D = 15;
         for (int nx = max(-LIM, sx - D); nx <= min(LIM, sx + D); nx++) {
           for (int ny = max(-LIM, sy - D); ny <= min(LIM, sy + D); ny++) {
-        // for (int nx = -LIM; nx <= LIM; nx++) {
-        //   for (int ny = -LIM; ny <= LIM; ny++) {
             Point sb = {nx, ny};
             auto val = ft + Eval(pts[order[i]], pts[order[i + 1]], sa, sb);
-            int& to = dp[i + 1][nx + LIM][ny + LIM];
+            int& to = dp[nx + LIM][ny + LIM];
             if (val < to) {
               to = val;
-              pr[i + 1][nx + LIM][ny + LIM] = sa;
+              pr[nx + LIM][ny + LIM] = sa;
             }
           }
         }
       }
-    }
-    int best = inf;
-    int bx = -1, by = -1;
-    for (int sx = -LIM; sx <= LIM; sx++) {
-      for (int sy = -LIM; sy <= LIM; sy++) {
-        auto ft = dp[n - 1][sx + LIM][sy + LIM];
-        if (ft < best) {
-          best = ft;
-          bx = sx;
-          by = sy;
+      for (int sx = -LIM; sx <= LIM; sx++) {
+        for (int sy = -LIM; sy <= LIM; sy++) {
+          auto ft = dp[sx + LIM][sy + LIM];
+          if (ft == inf) {
+            continue;
+          }
+          auto pp = pr[sx + LIM][sy + LIM];
+          bests[i + 1].push_back({ft, sx, sy, pp.x, pp.y});
         }
       }
+      sort(bests[i + 1].begin(), bests[i + 1].end());
+      if (bests[i + 1].empty()) {
+        debug("FAIL!", i);
+        assert(false);
+      }
+      if (int(bests[i + 1].size()) > B) {
+        bests[i + 1].resize(B);
+      }
     }
-    assert(best < inf);
+    auto [best, bx, by, px, py] = bests[n - 1][0];
+    // int best = bests[n - 1][0][0];
+    // int bx = -1, by = -1;
+    // for (int sx = -LIM; sx <= LIM; sx++) {
+    //   for (int sy = -LIM; sy <= LIM; sy++) {
+    //     auto ft = dp[n - 1][sx + LIM][sy + LIM];
+    //     if (ft < best) {
+    //       best = ft;
+    //       bx = sx;
+    //       by = sy;
+    //     }
+    //   }
+    // }
     debug(test_id, clock(), best);
+    assert(best < inf);
     for (int i = n - 1; i > 0; i--) {
       speeds[order[i]] = {bx, by};
-      auto from = pr[i][bx + LIM][by + LIM];
-      bx = from.x;
-      by = from.y;
+      bool found = false;
+      for (auto [_, qx, qy, vx, vy] : bests[i - 1]) {
+        if (qx == px && qy == py) {
+          bx = qx;
+          by = qy;
+          px = vx;
+          py = vy;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        debug("not found", i);
+        assert(found);
+      }
+      // auto from = pr[i][bx + LIM][by + LIM];
+      // bx = from.x;
+      // by = from.y;
     }
     return best;
   };
