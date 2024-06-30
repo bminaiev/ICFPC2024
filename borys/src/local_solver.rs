@@ -10,7 +10,7 @@ pub struct LocalSolver {
 impl LocalSolver {
     pub fn new() -> Self {
         Self {
-            precalc: Precalc::new(100, false),
+            precalc: Precalc::new(200, false),
         }
     }
 
@@ -46,7 +46,7 @@ impl LocalSolver {
             dp[x][y] = value
         };
         set(&mut dp, start_v, 0);
-        let max_delta = 3;
+        let max_delta = 7;
         for pts_i in 0..pts.len() - 1 {
             let cur = pts[pts_i];
             let next = pts[pts_i + 1];
@@ -67,7 +67,7 @@ impl LocalSolver {
                 }
             }
             bests.sort();
-            bests.truncate(10);
+            bests.truncate(15);
             for (cur_val, x, y) in bests {
                 let v = Point { x, y };
                 for nx in -limit.max(x - max_delta)..=limit.min(y + max_delta) {

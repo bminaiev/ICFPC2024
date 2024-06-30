@@ -9,7 +9,7 @@ pub mod spaceship;
 pub mod tsp;
 mod viz;
 
-pub const TEST_ID: usize = 25;
+pub const TEST_ID: usize = 19;
 
 use anyhow::Result;
 

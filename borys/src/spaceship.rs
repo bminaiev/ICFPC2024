@@ -793,10 +793,10 @@ fn calc_stats(pts: &[Point], sol: &[Point], test_id: usize) {
             prev_step = step;
         }
     }
-    const LIMIT: i64 = 4;
+    const LIMIT: i64 = 5;
     let mut i = 0;
     while i < ordered_pts.len() {
-        let good_sizes: Vec<_> = (3..100)
+        let good_sizes: Vec<_> = (3..50)
             .into_par_iter()
             .filter_map(|sz| {
                 if i + sz > ordered_pts.len() {
@@ -851,10 +851,10 @@ pub async fn spaceship_solve() -> bool {
 
         // eprintln!("Points: {:?}", pts);
         // for _ in 0..100 {
-        do_tsp(task_id, &pts);
+        // do_tsp(task_id, &pts);
         // }
-        // let solution = read_solution(task_id);
-        // calc_stats_old(&pts, &solution);
+        let solution = read_solution(task_id);
+        calc_stats(&pts, &solution, task_id);
 
         // let new_solution = solve(&pts, &solution, task_id, &vis_file);
         // check_solution(&pts, &solution);
