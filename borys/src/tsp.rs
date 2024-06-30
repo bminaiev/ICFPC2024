@@ -3,7 +3,10 @@ use std::time::Instant;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use crate::spaceship::{estimate_dist_simple, Point, Precalc};
+use crate::{
+    simulated_annealing::{SearchFor, SimulatedAnnealing},
+    spaceship::{estimate_dist_simple, Point, Precalc},
+};
 
 #[derive(Clone, Copy)]
 struct PointWithId {
@@ -37,9 +40,10 @@ pub fn solve_tsp(pts: &[Point], order: Option<Vec<usize>>) -> Vec<usize> {
     eprintln!("Initial sum_len: {}", sum_len);
 
     let mut rng = ChaCha8Rng::seed_from_u64(787788);
-    let start = Instant::now();
+    // let start = Instant::now();
     let mut it = 0;
-    while start.elapsed().as_secs_f64() < 30.0 {
+    let mut sa = SimulatedAnnealing::new(60.0, SearchFor::MinimumScore, 10.0, 0.01, sum_len as f64);
+    while sa.should_continue() {
         it += 1;
         let from = rng.gen_range(1..a.len());
         let to = rng.gen_range(from + 1..a.len() + 1);
@@ -55,10 +59,11 @@ pub fn solve_tsp(pts: &[Point], order: Option<Vec<usize>>) -> Vec<usize> {
             } else {
                 dist(a[from].p, a[to].p)
             });
-        if new_dist < cur_dist {
+
+        let new_score = sum_len - cur_dist + new_dist;
+        if sa.should_go(new_score as f64) {
             a[from..to].reverse();
-            sum_len -= cur_dist - new_dist;
-            eprintln!("{it}. New sum len: {sum_len}");
+            sum_len = new_score;
         }
     }
 

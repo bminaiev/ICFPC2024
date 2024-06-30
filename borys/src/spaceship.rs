@@ -1,14 +1,16 @@
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::alloc::System;
 use std::cmp::max;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default;
 use std::io::Write;
 use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::time::Instant;
 
+use crate::local_solver::LocalSolver;
 use crate::tsp::solve_tsp;
 use crate::{protocol, TEST_ID};
 
@@ -603,7 +605,7 @@ impl Precalc {
         let x = x - time as i64 * start_v;
         let need_v = end_v - start_v;
         let vs = self.get_vs(time, x);
-        eprintln!("Is possible time={time} x={x} start_v={start_v} end_v={end_v} vs={vs:?}");
+        // eprintln!("Is possible time={time} x={x} start_v={start_v} end_v={end_v} vs={vs:?}");
         vs.start <= need_v && need_v < vs.end
     }
 
@@ -716,7 +718,7 @@ pub fn estimate_dist_simple(cur: Point, next: Point, precalc: &Precalc) -> usize
     // unreachable!()
 }
 
-fn calc_stats(pts: &[Point], sol: &[Point]) {
+fn calc_stats_old(pts: &[Point], sol: &[Point]) {
     let precalc = Precalc::new(100, false);
 
     let mut pos = Point::ZERO;
@@ -756,6 +758,75 @@ fn calc_stats(pts: &[Point], sol: &[Point]) {
     );
 }
 
+fn calc_stats(pts: &[Point], sol: &[Point]) {
+    let local_solver = LocalSolver::new();
+
+    eprintln!("Sol len: {}", sol.len());
+
+    let mut pos = Point::ZERO;
+    let mut velocity = Point::ZERO;
+    let mut need_to_visit: HashMap<Point, usize> = pts
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(x, y)| (y, x))
+        .collect();
+    let mut ordered_pts = vec![pos];
+    let mut dists = vec![];
+    let mut prev_step = 0;
+    let mut velocities = vec![Point::ZERO];
+    let mut real_order = vec![];
+    for (step, &dir) in sol.iter().enumerate() {
+        velocity += dir;
+        pos += velocity;
+        if let Some(idx) = need_to_visit.remove(&pos) {
+            real_order.push(idx);
+            velocities.push(velocity);
+
+            ordered_pts.push(pos);
+            dists.push(step - prev_step);
+            prev_step = step;
+        }
+    }
+    const LIMIT: i64 = 3;
+    let mut i = 0;
+    while i < ordered_pts.len() {
+        let good_sizes: Vec<_> = (3..100)
+            .into_par_iter()
+            .filter_map(|sz| {
+                if i + sz > ordered_pts.len() {
+                    return None;
+                }
+                let mut pts: Vec<_> = ordered_pts[i..i + sz].to_vec();
+                pts[1..sz - 1].reverse();
+                let v_start = velocities[i];
+                let v_end = velocities[i + sz - 1];
+
+                let my_cost = local_solver.calc_best(&pts, v_start, v_end, LIMIT);
+                let real_cost = dists[i..i + sz - 1].iter().sum::<usize>();
+                if my_cost < real_cost {
+                    Some(sz)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !good_sizes.is_empty() {
+            let sz = good_sizes[0];
+            eprintln!("Optimized {i}. sz = {sz}");
+            real_order[i..i + sz - 2].reverse();
+            i += sz - 1;
+        }
+        i += 1;
+    }
+
+    let mut f = std::fs::File::create("../spaceship/spaceship19_order.txt").unwrap();
+    writeln!(f, "{}", real_order.len()).unwrap();
+    for id in real_order {
+        writeln!(f, "{}", id).unwrap();
+    }
+}
+
 pub async fn spaceship_solve() -> bool {
     eprintln!("Hello");
 
@@ -773,11 +844,11 @@ pub async fn spaceship_solve() -> bool {
         let pts = read_input(task_id);
 
         // eprintln!("Points: {:?}", pts);
-        for _ in 0..100 {
-            do_tsp(task_id, &pts);
-        }
-        // let solution = read_solution(task_id);
-        // calc_stats(&pts, &solution);
+        // for _ in 0..100 {
+        // do_tsp(task_id, &pts);
+        // }
+        let solution = read_solution(task_id);
+        calc_stats(&pts, &solution);
 
         // let new_solution = solve(&pts, &solution, task_id, &vis_file);
         // check_solution(&pts, &solution);
