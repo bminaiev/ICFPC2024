@@ -1,4 +1,7 @@
-use crate::spaceship::{self, Point};
+use crate::{
+    spaceship::{self, Point},
+    TEST_ID,
+};
 use eframe::egui::{CentralPanel, Color32, Context, Pos2, Stroke};
 use egui::{FontId, Vec2};
 
@@ -6,8 +9,6 @@ const SCREEN_W: f32 = 3500.0;
 const SCREEN_H: f32 = 2000.0;
 const PIXELS_PER_POINT: f32 = 1.5;
 const DEFAULT_ZOOM_FRAC: f32 = 300.0;
-
-const TEST_ID: usize = 23;
 
 struct Zoomer {
     zoom: f32,
@@ -152,9 +153,9 @@ impl eframe::App for App {
                     self.sol_path.len() - 1
                 ));
                 let painter = ui.painter();
+                let clip_rect = painter.clip_rect();
 
                 {
-                    let clip_rect = painter.clip_rect();
                     let top_left = self.zoomer.convert_back(clip_rect.min);
                     let bottom_right = self.zoomer.convert_back(clip_rect.max);
 
@@ -206,21 +207,66 @@ impl eframe::App for App {
                     }
                 }
 
+                let mut cnt_inside = 0;
                 for p in &self.input {
-                    painter.circle(self.zoomer.convert(*p), 6.0, Color32::RED, Stroke::NONE);
+                    let converted = self.zoomer.convert(*p);
+                    if clip_rect.contains(converted) {
+                        painter.circle(converted, 6.0, Color32::RED, Stroke::NONE);
+                        cnt_inside += 1;
+                    }
+                }
+                if cnt_inside < 20 {
+                    for p in &self.input {
+                        let converted = self.zoomer.convert(*p);
+                        painter.text(
+                            converted,
+                            egui::Align2::LEFT_BOTTOM,
+                            format!("{:?}", p),
+                            FontId::default(),
+                            Color32::BLACK,
+                        );
+                    }
                 }
 
+                let mut lines_inside = 0;
                 for w in self.sol_path.windows(2) {
-                    painter.line_segment(
-                        [self.zoomer.convert(w[0]), self.zoomer.convert(w[1])],
-                        Stroke {
-                            width: 2.0,
-                            color: Color32::BLUE,
-                        },
-                    );
+                    let p1 = self.zoomer.convert(w[0]);
+                    let p2 = self.zoomer.convert(w[1]);
+                    if clip_rect.contains(p1) || clip_rect.contains(p2) {
+                        lines_inside += 1;
+                    }
                 }
-                for p in self.sol_path.iter() {
-                    painter.circle(self.zoomer.convert(*p), 4.0, Color32::BLUE, Stroke::NONE);
+                if lines_inside < 10000 {
+                    for w in self.sol_path.windows(2) {
+                        let p1 = self.zoomer.convert(w[0]);
+                        let p2 = self.zoomer.convert(w[1]);
+                        if clip_rect.contains(p1) || clip_rect.contains(p2) {
+                            lines_inside += 1;
+                            painter.line_segment(
+                                [p1, p2],
+                                Stroke {
+                                    width: 2.0,
+                                    color: Color32::BLUE,
+                                },
+                            );
+                        }
+                    }
+                    for p in self.sol_path.iter() {
+                        painter.circle(self.zoomer.convert(*p), 4.0, Color32::BLUE, Stroke::NONE);
+                    }
+                } else {
+                    const STEP: usize = 10;
+                    for i in (0..self.sol_path.len() - STEP).step_by(STEP) {
+                        let p1 = self.zoomer.convert(self.sol_path[i]);
+                        let p2 = self.zoomer.convert(self.sol_path[i + STEP]);
+                        painter.line_segment(
+                            [p1, p2],
+                            Stroke {
+                                width: 2.0,
+                                color: Color32::BLUE,
+                            },
+                        );
+                    }
                 }
             });
     }
