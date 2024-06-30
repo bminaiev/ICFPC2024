@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
   }
   // n = min(n, 10000);
   // return 0;
-  const int M = 200;
+  const int M = 5000;
   const int inf = int(1e8);
   vector fmin(M + 1, vector<int>(2 * M + 1, +inf));
   vector fmax(M + 1, vector<int>(2 * M + 1, -inf));
@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
     vector<vector<array<int, 5>>> bests(n);
     bests[0].push_back({0, 0, 0, -1, -1});
     for (int i = 0; i < n - 1; i++) {
-      if (i % 1000 == 0) debug(i, clock(), bests[i].size(), bests[i][0]);
+      if (i % 100 == 0) debug(i, clock(), bests[i].size(), bests[i][0]);
       vector dp(2 * LIM + 1, vector<int>(2 * LIM + 1, inf));
       vector pr(2 * LIM + 1, vector<Point>(2 * LIM + 1, {-1, -1}));
       for (int id = 0; id < int(bests[i].size()); id++) {
