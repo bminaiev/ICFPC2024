@@ -18,8 +18,16 @@ for i in range(n):
     new_row = []
     for j in range(m):
         pref, cur = "", a[i][j]
-        while cur and cur[0] != 'v' and 'a' <= cur[0] <= 'z':
-            pref, cur = pref + cur[0], cur[1:]
+        #while cur and cur[0] != 'v' and 'a' <= cur[0] <= 'z':
+        #    pref, cur = pref + cur[0], cur[1:]
+        ff = -1
+        for w, c in enumerate(cur):
+            if c != 'v' and 'a' <= c <= 'z':
+                ff = w
+                break
+        if ff != -1:
+            pref = cur[ff:]
+            cur = cur[:ff]
         if pref:
             if i + 1 < n and a[i+1][j] == '@':
                 if pref in src:
