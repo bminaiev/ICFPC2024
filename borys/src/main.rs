@@ -1,6 +1,7 @@
 use std::fs;
 
 pub mod array_2d;
+mod lambdaman;
 pub mod local_solver;
 mod parser;
 mod protocol;
@@ -9,7 +10,7 @@ pub mod spaceship;
 pub mod tsp;
 mod viz;
 
-pub const TEST_ID: usize = 19;
+pub const TEST_ID: usize = 11;
 
 use anyhow::Result;
 
@@ -42,12 +43,13 @@ async fn main() -> Result<()> {
     }
     println!("Hello, world!");
     // viz::viz_main().unwrap();
-    if spaceship_solve().await {
-        return Ok(());
-    }
+    // if spaceship_solve().await {
+    //     return Ok(());
+    // }
 
     // test();
     // send_msg("get spaceship").await?;
 
+    lambdaman::lambda_solver();
     Ok(())
 }
