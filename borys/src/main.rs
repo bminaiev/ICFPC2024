@@ -9,6 +9,8 @@ pub mod simulated_annealing;
 pub mod spaceship;
 pub mod tsp;
 mod viz;
+mod viz_lambda;
+pub mod zoomer;
 
 pub const TEST_ID: usize = 11;
 
@@ -42,7 +44,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     println!("Hello, world!");
-    // viz::viz_main().unwrap();
+    viz_lambda::viz_lambda_main().unwrap();
     // if spaceship_solve().await {
     //     return Ok(());
     // }
@@ -50,6 +52,6 @@ async fn main() -> Result<()> {
     // test();
     // send_msg("get spaceship").await?;
 
-    lambdaman::lambda_solver();
+    // lambdaman::lambda_solver();
     Ok(())
 }

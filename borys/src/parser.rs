@@ -431,3 +431,14 @@ fn fact_diff() {
     let eval_res = eval(&res);
     eprintln!("Eval res: {:?}", eval_res);
 }
+
+#[test]
+fn lambdaman() {
+    let input = r#"
+        B$ B$ L$ B$ v$ v$ L# L" ? B= v" I^s S3/,6%},!-"$!-!.VV} B. B$ B$ v# v# B% B* v" I] I6)vM BT I% BD B% v" I1 SFFOOFF>>LLOOLL>>FF Im
+    "#;
+    let res = parse_string(input);
+    eprintln!("Res: {:?}", res);
+    // let eval_res = eval(&res);
+    // eprintln!("Eval res: {:?}", eval_res);
+}
