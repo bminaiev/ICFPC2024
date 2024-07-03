@@ -1,6 +1,6 @@
 use crate::{
     array_2d::Array2D,
-    lambdaman,
+    lambdaman::{self, VerySimpleRng, DEFAULT_STEPS_LIMIT},
     spaceship::{self, Point},
     zoomer::{Zoomer, PIXELS_PER_POINT, SCREEN_H, SCREEN_W},
     TEST_ID,
@@ -33,10 +33,14 @@ impl Default for App {
         let input = vec![Point::new(0, 0), Point::new(n as i64, m as i64)];
         let zoomer = Zoomer::new(&input);
 
+        let best_seed = 159444415;
+        let best_seed = lambdaman::find_good_seed(&task.walls, task.start);
+
         let visited = lambdaman::eval(
             &task.walls,
             task.start,
-            &mut ChaCha8Rng::seed_from_u64(7877881),
+            &mut VerySimpleRng::seed_from_u64(best_seed),
+            DEFAULT_STEPS_LIMIT,
         );
 
         // let visited = Array2D::new(false, n, m);
